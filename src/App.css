@@ -169,3 +169,37 @@ body {
   gap: 10px;
   margin-top: 20px;
 }
+
+/* Responsive Styles for Mobile */
+@media screen and (max-width: 600px) {
+  .ranking-header h1 {
+    font-size: 20px;
+  }
+
+  .ranking-item {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 16px;
+  }
+
+  .player-info {
+    width: 100%;
+    margin-bottom: 12px;
+  }
+
+  .player-actions {
+    width: 100%;
+    display: flex;
+    justify-content: flex-end;
+    margin-left: 0;
+  }
+  
+  .player-actions button {
+      margin-left: 12px;
+  }
+
+  .fab {
+    bottom: 20px;
+    right: 20px;
+  }
+}
