@@ -1,8 +1,12 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import AddRecordModal from './AddRecordModal';
 
-test('renders modal with shared form styles', () => {
+beforeEach(() => {
+  localStorage.clear();
+});
+
+test('renders modal with shared form styles and helper texts', () => {
   render(
     <AddRecordModal isOpen={true} onClose={jest.fn()} onSubmit={jest.fn()} />
   );
@@ -15,6 +19,7 @@ test('renders modal with shared form styles', () => {
   expect(screen.getByLabelText('選手名')).toHaveClass('input');
   expect(screen.getByLabelText('球速 (km/h)')).toHaveClass('input');
 
+  expect(screen.getByText(/40〜180 km\/h/)).toBeInTheDocument();
   expect(screen.getByRole('button', { name: '追加' })).toHaveClass(
     'btn',
     'btn-primary'
@@ -37,4 +42,61 @@ test('prefills player name when presetName is provided', async () => {
 
   await userEvent.click(screen.getByRole('button', { name: '名前を変更' }));
   expect(nameInput).not.toHaveAttribute('readonly');
+});
+
+test('remembers last entry and suggests previous names', async () => {
+  localStorage.setItem('baseball-speedgun:lastName', 'Ito');
+  localStorage.setItem('baseball-speedgun:lastDate', '2024-05-05');
+
+  render(
+    <AddRecordModal
+      isOpen={true}
+      onClose={jest.fn()}
+      onSubmit={jest.fn()}
+      suggestedNames={['Sato', 'Ito', 'Mori']}
+    />
+  );
+
+  const nameInput = screen.getByLabelText('選手名') as HTMLInputElement;
+  expect(nameInput).toHaveValue('Ito');
+  expect(
+    screen.getByText('最終入力日: 2024-05-05')
+  ).toBeInTheDocument();
+
+  await userEvent.clear(nameInput);
+
+  const listbox = screen.getByRole('listbox', {
+    name: 'これまでの選手名候補',
+  });
+  await userEvent.click(
+    within(listbox).getByRole('option', { name: /Sato/ })
+  );
+  expect(nameInput).toHaveValue('Sato');
+});
+
+test('validates speed range and disables submit when invalid', async () => {
+  const onSubmit = jest.fn().mockResolvedValue(undefined);
+  render(<AddRecordModal isOpen={true} onClose={jest.fn()} onSubmit={onSubmit} />);
+
+  const nameInput = screen.getByLabelText('選手名');
+  const speedInput = screen.getByLabelText('球速 (km/h)');
+  const dateInput = screen.getByLabelText('日付');
+  const submitButton = screen.getByRole('button', { name: '追加' });
+
+  await userEvent.clear(dateInput);
+  await userEvent.type(dateInput, '2024-12-01');
+  await userEvent.type(nameInput, 'Yamada');
+  await userEvent.clear(speedInput);
+  await userEvent.type(speedInput, '30');
+
+  expect(submitButton).toBeDisabled();
+  expect(screen.getByText('40〜180km/hで入力してください')).toBeInTheDocument();
+
+  await userEvent.clear(speedInput);
+  await userEvent.type(speedInput, '150');
+
+  expect(submitButton).toBeEnabled();
+  await userEvent.click(submitButton);
+  await screen.findByRole('button', { name: '追加' }); // wait for submit to settle
+  expect(onSubmit).toHaveBeenCalledWith('Yamada', '150', '2024-12-01');
 });
