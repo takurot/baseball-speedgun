@@ -28,35 +28,45 @@ const SignUp = () => {
   };
 
   return (
-    <div style={{ maxWidth: '400px', margin: '50px auto', padding: '20px', border: '1px solid #ccc', borderRadius: '10px' }}>
-      <h2>新規登録</h2>
-      {error && <p style={{ color: 'red' }}>{error}</p>}
-      <form onSubmit={handleSignUp}>
-        <div style={{ marginBottom: '10px' }}>
-          <label>メールアドレス</label>
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }}
-          />
-        </div>
-        <div style={{ marginBottom: '10px' }}>
-          <label>パスワード</label>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }}
-          />
-        </div>
-        <button type="submit" style={{ width: '100%', padding: '10px', background: '#28a745', color: 'white', border: 'none', borderRadius: '5px' }}>登録する</button>
-      </form>
-      <p style={{ marginTop: '15px', textAlign: 'center' }}>
-        既にアカウントをお持ちですか？ <Link to="/login">ログイン</Link>
-      </p>
+    <div className="auth-page">
+      <div className="auth-card card">
+        <h2 className="auth-title">新規登録</h2>
+        {error && <p className="form-error">{error}</p>}
+        <form onSubmit={handleSignUp} className="auth-form">
+          <div className="form-field">
+            <label className="form-label" htmlFor="signup-email">
+              メールアドレス
+            </label>
+            <input
+              id="signup-email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="input"
+              required
+            />
+          </div>
+          <div className="form-field">
+            <label className="form-label" htmlFor="signup-password">
+              パスワード
+            </label>
+            <input
+              id="signup-password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="input"
+              required
+            />
+          </div>
+          <button type="submit" className="btn btn-success btn-block">
+            登録する
+          </button>
+        </form>
+        <p className="auth-footer">
+          既にアカウントをお持ちですか？ <Link to="/login">ログイン</Link>
+        </p>
+      </div>
     </div>
   );
 };
