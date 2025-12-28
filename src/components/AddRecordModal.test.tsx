@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import AddRecordModal from './AddRecordModal';
 
 test('renders modal with shared form styles', () => {
@@ -18,4 +19,22 @@ test('renders modal with shared form styles', () => {
     'btn',
     'btn-primary'
   );
+});
+
+test('prefills player name when presetName is provided', async () => {
+  render(
+    <AddRecordModal
+      isOpen={true}
+      onClose={jest.fn()}
+      onSubmit={jest.fn()}
+      presetName="Sato"
+    />
+  );
+
+  const nameInput = screen.getByLabelText('選手名') as HTMLInputElement;
+  expect(nameInput).toHaveValue('Sato');
+  expect(nameInput).toHaveAttribute('readonly');
+
+  await userEvent.click(screen.getByRole('button', { name: '名前を変更' }));
+  expect(nameInput).not.toHaveAttribute('readonly');
 });

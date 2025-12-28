@@ -1,15 +1,31 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 
 interface Props {
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (name: string, speed: string, date: string) => void;
+  presetName?: string;
 }
 
-const AddRecordModal: React.FC<Props> = ({ isOpen, onClose, onSubmit }) => {
-  const [name, setName] = useState('');
+const AddRecordModal: React.FC<Props> = ({
+  isOpen,
+  onClose,
+  onSubmit,
+  presetName,
+}) => {
+  const getToday = () => new Date().toISOString().split('T')[0];
+  const [name, setName] = useState(presetName ?? '');
+  const [nameLocked, setNameLocked] = useState<boolean>(Boolean(presetName));
   const [speed, setSpeed] = useState('');
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]); // 今日の日付をデフォルトに
+  const [date, setDate] = useState(getToday());
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setName(presetName ?? '');
+    setNameLocked(Boolean(presetName));
+    setSpeed('');
+    setDate(getToday());
+  }, [isOpen, presetName]);
 
   if (!isOpen) {
     return null;
@@ -17,11 +33,10 @@ const AddRecordModal: React.FC<Props> = ({ isOpen, onClose, onSubmit }) => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit(name, speed, date);
-    // フォームをリセット
-    setName('');
+    if (!name.trim() || !speed || !date) return;
+    onSubmit(name.trim(), speed, date);
     setSpeed('');
-    setDate(new Date().toISOString().split('T')[0]);
+    setDate(getToday());
   };
 
   return (
@@ -48,9 +63,20 @@ const AddRecordModal: React.FC<Props> = ({ isOpen, onClose, onSubmit }) => {
             />
           </div>
           <div className="form-field">
-            <label htmlFor="name" className="form-label">
-              選手名
-            </label>
+            <div className="form-field-header">
+              <label htmlFor="name" className="form-label">
+                選手名
+              </label>
+              {nameLocked && (
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => setNameLocked(false)}
+                >
+                  名前を変更
+                </button>
+              )}
+            </div>
             <input
               id="name"
               type="text"
@@ -58,8 +84,14 @@ const AddRecordModal: React.FC<Props> = ({ isOpen, onClose, onSubmit }) => {
               onChange={(e) => setName(e.target.value)}
               placeholder="選手名"
               className="input"
+              readOnly={nameLocked}
               required
             />
+            {nameLocked && (
+              <p className="input-hint">
+                ランキングからのクイック追加です。変更する場合は「名前を変更」を押してください。
+              </p>
+            )}
           </div>
           <div className="form-field">
             <label htmlFor="speed" className="form-label">
