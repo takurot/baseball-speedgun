@@ -26,44 +26,62 @@ const AddRecordModal: React.FC<Props> = ({ isOpen, onClose, onSubmit }) => {
 
   return (
     <div className="modal-overlay">
-      <div className="modal-content">
-        <h2>新しい記録を追加</h2>
-        <form onSubmit={handleSubmit}>
-          <div className="form-group">
-            <label htmlFor="date">日付</label>
+      <div
+        className="modal-content"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="add-record-title"
+      >
+        <h2 id="add-record-title">新しい記録を追加</h2>
+        <form onSubmit={handleSubmit} className="modal-form">
+          <div className="form-field">
+            <label htmlFor="date" className="form-label">
+              日付
+            </label>
             <input
               id="date"
               type="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
+              className="input"
               required
             />
           </div>
-          <div className="form-group">
-            <label htmlFor="name">選手名</label>
+          <div className="form-field">
+            <label htmlFor="name" className="form-label">
+              選手名
+            </label>
             <input
               id="name"
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="選手名"
+              className="input"
               required
             />
           </div>
-          <div className="form-group">
-            <label htmlFor="speed">球速 (km/h)</label>
+          <div className="form-field">
+            <label htmlFor="speed" className="form-label">
+              球速 (km/h)
+            </label>
             <input
               id="speed"
               type="number"
               value={speed}
               onChange={(e) => setSpeed(e.target.value)}
               placeholder="150"
+              className="input"
               required
             />
           </div>
           <div className="form-actions">
-            <button type="submit" className="button-primary">追加</button>
-            <button type="button" onClick={onClose}>キャンセル</button>
+            <button type="submit" className="btn btn-primary">
+              追加
+            </button>
+            <button type="button" onClick={onClose} className="btn btn-ghost">
+              キャンセル
+            </button>
           </div>
         </form>
       </div>

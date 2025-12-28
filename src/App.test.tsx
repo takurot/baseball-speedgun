@@ -1,9 +1,20 @@
-import React from 'react';
 import { render, screen } from '@testing-library/react';
 import App from './App';
 
-test('renders learn react link', () => {
+jest.mock('./firebase', () => ({
+  auth: {},
+}));
+
+jest.mock('firebase/auth', () => ({
+  onAuthStateChanged: (_auth: unknown, callback: (user: null) => void) => {
+    callback(null);
+    return () => {};
+  },
+}));
+
+test('routes signed-out users to login', async () => {
   render(<App />);
-  const linkElement = screen.getByText(/learn react/i);
-  expect(linkElement).toBeInTheDocument();
+  expect(
+    await screen.findByRole('heading', { name: 'ログイン' })
+  ).toBeInTheDocument();
 });

@@ -122,26 +122,41 @@ const PlayerDetail = () => {
   };
 
   return (
-    <div>
-      <Link to="/ranking">← ランキングに戻る</Link>
-      <h1>{name}選手 詳細</h1>
-      {records.length > 0 ? (
-        <>
-          <Line options={options} data={chartData} />
-          
-          <h2>全投球記録</h2>
-          <div style={{ textAlign: 'center', marginTop: '20px' }}>
-            {records.map((record) => (
-              <div key={record.id} style={{ marginBottom: '10px' }}>
-                <span>{record.date.toLocaleDateString()} - {record.speed} km/h</span>
-                <button onClick={() => handleDeleteRecord(record.id)} style={{marginLeft: '10px'}}>削除</button>
+    <div className="page detail-page">
+      <div className="container">
+        <Link to="/ranking" className="back-link">
+          ← ランキングに戻る
+        </Link>
+        <h1 className="page-title">{name}選手 詳細</h1>
+        {records.length > 0 ? (
+          <>
+            <div className="card detail-card">
+              <Line options={options} data={chartData} />
+            </div>
+
+            <section className="detail-section">
+              <h2 className="section-title">全投球記録</h2>
+              <div className="record-list">
+                {records.map((record) => (
+                  <div key={record.id} className="record-item card">
+                    <span className="record-meta">
+                      {record.date.toLocaleDateString()} - {record.speed} km/h
+                    </span>
+                    <button
+                      onClick={() => handleDeleteRecord(record.id)}
+                      className="btn btn-ghost btn-sm"
+                    >
+                      削除
+                    </button>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        </>
-      ) : (
-        <p>記録がありません。</p>
-      )}
+            </section>
+          </>
+        ) : (
+          <p className="empty-state">記録がありません。</p>
+        )}
+      </div>
     </div>
   );
 };

@@ -138,17 +138,17 @@ const Ranking = () => {
   };
 
   return (
-    <>
-      <header className="ranking-header">
-        <h1>スピードガンランキング</h1>
-        <button onClick={handleLogout} className="logout-button">
+    <div className="page ranking-page">
+      <header className="ranking-header container">
+        <h1 className="page-title">スピードガンランキング</h1>
+        <button onClick={handleLogout} className="btn btn-ghost">
           ログアウト
         </button>
       </header>
-      
-      <main className="ranking-main">
+
+      <main className="ranking-main container">
         {rankedPlayers.map((player) => (
-          <div key={player.id} className="ranking-item">
+          <div key={player.id} className="ranking-item card">
             <div className="player-info">
               <div className="rank-display">
                 {player.rank === 1 && '🥇 '}
@@ -161,21 +161,41 @@ const Ranking = () => {
               </div>
             </div>
             <div className="player-actions">
-              <button onClick={() => navigate(`/player/${player.name}`)} title="グラフを表示">📈</button>
-              <button onClick={() => handleDeletePlayer(player.name)} title="削除" className="delete-button">🗑️</button>
+              <button
+                onClick={() => navigate(`/player/${player.name}`)}
+                title="グラフを表示"
+                aria-label={`${player.name}のグラフを表示`}
+                className="icon-button"
+              >
+                📈
+              </button>
+              <button
+                onClick={() => handleDeletePlayer(player.name)}
+                title="削除"
+                aria-label={`${player.name}を削除`}
+                className="icon-button icon-button-danger"
+              >
+                🗑️
+              </button>
             </div>
           </div>
         ))}
       </main>
 
-      <button className="fab" onClick={() => setIsModalOpen(true)}>+</button>
+      <button
+        className="fab"
+        onClick={() => setIsModalOpen(true)}
+        aria-label="記録を追加"
+      >
+        +
+      </button>
 
-      <AddRecordModal 
+      <AddRecordModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onSubmit={handleAddRecord}
       />
-    </>
+    </div>
   );
 };
 
