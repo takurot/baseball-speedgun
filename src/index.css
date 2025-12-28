@@ -201,6 +201,13 @@ code {
   font-weight: 600;
 }
 
+.field-error {
+  margin: var(--space-1) 0 0;
+  color: var(--color-danger);
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
 .icon-button {
   display: inline-flex;
   align-items: center;
@@ -278,6 +285,50 @@ code {
 
 .toast-error {
   border-color: rgba(220, 38, 38, 0.35);
+}
+
+.toast-container {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  display: grid;
+  gap: var(--space-2);
+  width: min(420px, calc(100% - var(--space-6)));
+  z-index: 1200;
+}
+
+.toast-body {
+  flex: 1;
+}
+
+.chip-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.chip {
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-muted);
+  border-radius: var(--radius-pill);
+  padding: 6px 12px;
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--color-text);
+  transition: background var(--transition-base), border-color var(--transition-base),
+    transform var(--transition-base);
+}
+
+.chip:hover {
+  background: #e2e8f0;
+  border-color: var(--color-primary);
+  transform: translateY(-1px);
+}
+
+.chip:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
 }
 
 .empty-state {

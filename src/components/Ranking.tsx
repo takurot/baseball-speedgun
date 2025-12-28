@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { db, auth } from '../firebase';
 import { signOut, onAuthStateChanged, User } from 'firebase/auth';
 import {
@@ -13,6 +13,7 @@ import {
 } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
 import AddRecordModal from './AddRecordModal';
+import { SPEED_MAX, SPEED_MIN } from '../constants';
 
 interface Player {
   id: string;
@@ -70,7 +71,18 @@ const Ranking = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [toast, setToast] = useState<
+    { type: 'success' | 'error'; message: string } | null
+  >(null);
+  const toastTimerRef = useRef<NodeJS.Timeout | null>(null);
   const navigate = useNavigate();
+  const nameSuggestions = useMemo(
+    () =>
+      Array.from(new Set(players.map((player) => player.name))).sort((a, b) =>
+        a.localeCompare(b, 'ja')
+      ),
+    [players]
+  );
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -118,16 +130,48 @@ const Ranking = () => {
     return () => unsub();
   }, [currentUser]);
 
-  const handleAddRecord = async (name: string, speed: string, date: string) => {
-    if (!currentUser || name === '' || speed === '' || date === '') return;
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) {
+        clearTimeout(toastTimerRef.current);
+      }
+    };
+  }, []);
 
+  const showToast = (nextToast: { type: 'success' | 'error'; message: string }) => {
+    if (toastTimerRef.current) {
+      clearTimeout(toastTimerRef.current);
+    }
+    setToast(nextToast);
+    toastTimerRef.current = setTimeout(() => setToast(null), 3600);
+  };
+
+  const handleAddRecord = async (name: string, speed: string, date: string) => {
+    if (!currentUser) {
+      throw new Error('ログイン情報を確認してください。');
+    }
+
+    const trimmedName = name.trim();
     const newSpeed = Number(speed);
-    if (Number.isNaN(newSpeed)) return;
     const recordDate = new Date(date);
+    if (!trimmedName || !speed || !date) {
+      throw new Error('入力内容を確認してください。');
+    }
+    if (Number.isNaN(newSpeed) || newSpeed < SPEED_MIN || newSpeed > SPEED_MAX) {
+      throw new Error(`球速は${SPEED_MIN}〜${SPEED_MAX}km/hで入力してください。`);
+    }
+    if (Number.isNaN(recordDate.getTime())) {
+      throw new Error('日付が正しくありません。');
+    }
+
     const recordDateString = recordDate.toISOString().split('T')[0];
 
-    const playerRef = doc(db, `users/${currentUser.uid}/players`, name);
-    const recordRef = doc(db, `users/${currentUser.uid}/players/${name}/records`, recordDateString);
+    const playerRef = doc(db, `users/${currentUser.uid}/players`, trimmedName);
+    const recordRef = doc(
+      db,
+      `users/${currentUser.uid}/players/${trimmedName}/records`,
+      recordDateString
+    );
 
     try {
       const recordSnap = await getDoc(recordRef);
@@ -142,18 +186,29 @@ const Ranking = () => {
       }
 
       const playerSnap = await getDoc(playerRef);
-      const currentMaxSpeed = playerSnap.exists() ? playerSnap.data().speed : 0;
+      const currentMaxSpeed = playerSnap.exists()
+        ? playerSnap.data().speed
+        : 0;
       const nextMaxSpeed = Math.max(currentMaxSpeed, newSpeed);
       await setDoc(
         playerRef,
-        { name, speed: nextMaxSpeed, updatedAt: recordDate },
+        { name: trimmedName, speed: nextMaxSpeed, updatedAt: recordDate },
         { merge: true }
       );
 
       setIsModalOpen(false);
       setPresetName(undefined);
+      showToast({
+        type: 'success',
+        message: `${trimmedName}に${newSpeed}km/hで記録を追加しました`,
+      });
     } catch (error) {
       console.error("記録の追加に失敗しました: ", error);
+      showToast({
+        type: 'error',
+        message: '記録の追加に失敗しました。ネットワークを確認して再試行してください。',
+      });
+      throw error;
     }
   };
 
@@ -464,7 +519,27 @@ const Ranking = () => {
         onClose={handleCloseModal}
         onSubmit={handleAddRecord}
         presetName={presetName}
+        suggestedNames={nameSuggestions}
       />
+      {toast && (
+        <div className="toast-container" aria-live="polite">
+          <div
+            className={`toast ${toast.type === 'success' ? 'toast-success' : 'toast-error'}`}
+          >
+            <span aria-hidden="true">
+              {toast.type === 'success' ? '✅' : '⚠️'}
+            </span>
+            <div className="toast-body">{toast.message}</div>
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() => setToast(null)}
+            >
+              閉じる
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
