@@ -288,15 +288,14 @@ const SharedRanking: React.FC = () => {
               <div key={player.name} className="ranking-item card">
                 <div className="ranking-item-main ranking-item-main-static">
                   <div
-                    className={`rank-badge ${
-                      player.rank === 1
+                    className={`rank-badge ${player.rank === 1
                         ? 'rank-1'
                         : player.rank === 2
                           ? 'rank-2'
                           : player.rank === 3
                             ? 'rank-3'
                             : ''
-                    }`}
+                      }`}
                     aria-label={`${player.rank}位`}
                   >
                     {player.rank}
@@ -311,17 +310,6 @@ const SharedRanking: React.FC = () => {
                 <div className="player-speed">
                   <span className="speed-value">{player.speed}</span>
                   <span className="speed-unit">km/h</span>
-                </div>
-                <div className="player-actions">
-                  <button
-                    type="button"
-                    onClick={() => navigate(`/share/${shareId}/player/${player.name}`)}
-                    title="推移グラフを表示"
-                    aria-label={`${player.name}の推移グラフを表示`}
-                    className="icon-button"
-                  >
-                    📈
-                  </button>
                 </div>
               </div>
             ))}

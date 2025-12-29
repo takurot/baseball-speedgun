@@ -5,10 +5,7 @@ import {
   deleteDoc,
   doc,
   getDocs,
-  limit,
-  orderBy,
   query,
-  setDoc,
   serverTimestamp,
   where,
   writeBatch,
@@ -232,7 +229,11 @@ const ShareRankingModal: React.FC<Props> = ({
 
       const existing = await getDocs(sharesQuery);
       shareRef = doc(collection(db, 'shares'));
-      await setDoc(shareRef, {
+
+      // 共有ドキュメントを作成
+      const batch = writeBatch(db);
+
+      batch.set(shareRef, {
         version: 2,
         ownerUid,
         createdAt: serverTimestamp(),
@@ -247,49 +248,10 @@ const ShareRankingModal: React.FC<Props> = ({
         })),
       });
 
-      const threshold = getPeriodThreshold(snapshot.periodFilter);
-      for (const player of snapshot.players) {
-        const recordsRef = collection(
-          db,
-          `users/${ownerUid}/players/${player.name}/records`
-        );
-        const recordsQuery = threshold
-          ? query(
-              recordsRef,
-              where('date', '>=', threshold),
-              orderBy('date', 'desc'),
-              limit(MAX_CHART_RECORDS + 1)
-            )
-          : query(recordsRef, orderBy('date', 'desc'), limit(MAX_CHART_RECORDS + 1));
-        const recordSnapshot = await getDocs(recordsQuery);
-        const rawRecords = recordSnapshot.docs.map((docSnap) => docSnap.data());
-        const truncated = rawRecords.length > MAX_CHART_RECORDS;
-        const trimmedRecords = rawRecords.slice(0, MAX_CHART_RECORDS).reverse();
-        const chartRecords = trimmedRecords
-          .map((record: any) => ({
-            date: toDate(record.date),
-            speed: typeof record.speed === 'number' ? record.speed : 0,
-          }))
-          .filter((record: { date: Date | null; speed: number }) => record.date && record.speed > 0)
-          .map((record: { date: Date | null; speed: number }) => ({
-            date: record.date as Date,
-            speed: record.speed,
-          }));
+      // 古い共有リンクを削除
+      existing.docs.forEach((docSnap) => batch.delete(docSnap.ref));
 
-        const chartRef = doc(db, 'shares', shareRef.id, 'charts', player.name);
-        await setDoc(chartRef, {
-          name: player.name,
-          truncated,
-          records: chartRecords,
-          createdAt: serverTimestamp(),
-        });
-      }
-
-      if (existing.docs.length > 0) {
-        const cleanupBatch = writeBatch(db);
-        existing.docs.forEach((docSnap) => cleanupBatch.delete(docSnap.ref));
-        await cleanupBatch.commit();
-      }
+      await batch.commit();
 
       setShareLink({ id: shareRef.id, createdAt: now, expiresAt });
       onToast({ type: 'success', message: '共有リンクを作成しました' });
