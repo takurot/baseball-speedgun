@@ -157,7 +157,7 @@ const SharedRanking: React.FC = () => {
     );
   }
 
-  if (isInvalid || !data || isExpired) {
+  if (isInvalid || !data || isExpired || !shareId) {
     return (
       <div className="page ranking-page">
         <header className="ranking-header container">
@@ -312,6 +312,17 @@ const SharedRanking: React.FC = () => {
                   <span className="speed-value">{player.speed}</span>
                   <span className="speed-unit">km/h</span>
                 </div>
+                <div className="player-actions">
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/share/${shareId}/player/${player.name}`)}
+                    title="推移グラフを表示"
+                    aria-label={`${player.name}の推移グラフを表示`}
+                    className="icon-button"
+                  >
+                    📈
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -322,4 +333,3 @@ const SharedRanking: React.FC = () => {
 };
 
 export default SharedRanking;
-

@@ -12,7 +12,10 @@ jest.mock('firebase/firestore', () => ({
   deleteDoc: jest.fn(),
   doc: jest.fn(() => ({ id: 'share-generated' })),
   getDocs: (...args: unknown[]) => mockGetDocs(...args),
+  limit: jest.fn(() => ({})),
+  orderBy: jest.fn(() => ({})),
   query: jest.fn(() => ({})),
+  setDoc: jest.fn(),
   serverTimestamp: jest.fn(() => 'SERVER_TIMESTAMP'),
   where: jest.fn(() => ({})),
   writeBatch: jest.fn(() => ({
@@ -90,4 +93,3 @@ test('shows existing share link when user already created one', async () => {
     screen.getByRole('button', { name: 'リンクを再発行' })
   ).toBeInTheDocument();
 });
-

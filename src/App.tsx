@@ -6,6 +6,7 @@ import { auth } from './firebase';
 import Ranking from './components/Ranking';
 import PlayerDetail from './components/PlayerDetail';
 import SharedRanking from './components/SharedRanking';
+import SharedPlayerDetail from './components/SharedPlayerDetail';
 import Login from './components/Login';
 import SignUp from './components/SignUp';
 import './App.css';
@@ -50,6 +51,7 @@ function App() {
 
         {/* 共有リンクはログイン不要 */}
         <Route path="/share/:shareId" element={<SharedRanking />} />
+        <Route path="/share/:shareId/player/:name" element={<SharedPlayerDetail />} />
         
         {/* ログイン済みユーザー向けのルート */}
         <Route element={<PrivateRoute user={user} />}>

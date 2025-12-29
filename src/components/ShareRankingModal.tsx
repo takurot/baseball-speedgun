@@ -5,7 +5,10 @@ import {
   deleteDoc,
   doc,
   getDocs,
+  limit,
+  orderBy,
   query,
+  setDoc,
   serverTimestamp,
   where,
   writeBatch,
@@ -86,6 +89,17 @@ const addDays = (base: Date, days: number) => {
   const next = new Date(base);
   next.setDate(next.getDate() + days);
   return next;
+};
+
+const MAX_CHART_RECORDS = 60;
+
+const getPeriodThreshold = (filter: PeriodFilter) => {
+  if (filter === 'all') return null;
+  const days = filter === '30' ? 30 : 7;
+  const threshold = new Date();
+  threshold.setHours(0, 0, 0, 0);
+  threshold.setDate(threshold.getDate() - (days - 1));
+  return threshold;
 };
 
 const copyToClipboard = async (text: string) => {
@@ -204,6 +218,11 @@ const ShareRankingModal: React.FC<Props> = ({
 
     setIsSubmitting(true);
     setError(null);
+    const sharesQuery = query(
+      collection(db, 'shares'),
+      where('ownerUid', '==', ownerUid)
+    );
+    let shareRef: ReturnType<typeof doc> | null = null;
     try {
       const now = new Date();
       const expiresAt =
@@ -211,17 +230,10 @@ const ShareRankingModal: React.FC<Props> = ({
           ? null
           : addDays(now, expiry === '7' ? 7 : 30);
 
-      const sharesQuery = query(
-        collection(db, 'shares'),
-        where('ownerUid', '==', ownerUid)
-      );
       const existing = await getDocs(sharesQuery);
-      const batch = writeBatch(db);
-      existing.docs.forEach((docSnap) => batch.delete(docSnap.ref));
-
-      const shareRef = doc(collection(db, 'shares'));
-      batch.set(shareRef, {
-        version: 1,
+      shareRef = doc(collection(db, 'shares'));
+      await setDoc(shareRef, {
+        version: 2,
         ownerUid,
         createdAt: serverTimestamp(),
         expiresAt,
@@ -235,11 +247,61 @@ const ShareRankingModal: React.FC<Props> = ({
         })),
       });
 
-      await batch.commit();
+      const threshold = getPeriodThreshold(snapshot.periodFilter);
+      for (const player of snapshot.players) {
+        const recordsRef = collection(
+          db,
+          `users/${ownerUid}/players/${player.name}/records`
+        );
+        const recordsQuery = threshold
+          ? query(
+              recordsRef,
+              where('date', '>=', threshold),
+              orderBy('date', 'desc'),
+              limit(MAX_CHART_RECORDS + 1)
+            )
+          : query(recordsRef, orderBy('date', 'desc'), limit(MAX_CHART_RECORDS + 1));
+        const recordSnapshot = await getDocs(recordsQuery);
+        const rawRecords = recordSnapshot.docs.map((docSnap) => docSnap.data());
+        const truncated = rawRecords.length > MAX_CHART_RECORDS;
+        const trimmedRecords = rawRecords.slice(0, MAX_CHART_RECORDS).reverse();
+        const chartRecords = trimmedRecords
+          .map((record: any) => ({
+            date: toDate(record.date),
+            speed: typeof record.speed === 'number' ? record.speed : 0,
+          }))
+          .filter((record: { date: Date | null; speed: number }) => record.date && record.speed > 0)
+          .map((record: { date: Date | null; speed: number }) => ({
+            date: record.date as Date,
+            speed: record.speed,
+          }));
+
+        const chartRef = doc(db, 'shares', shareRef.id, 'charts', player.name);
+        await setDoc(chartRef, {
+          name: player.name,
+          truncated,
+          records: chartRecords,
+          createdAt: serverTimestamp(),
+        });
+      }
+
+      if (existing.docs.length > 0) {
+        const cleanupBatch = writeBatch(db);
+        existing.docs.forEach((docSnap) => cleanupBatch.delete(docSnap.ref));
+        await cleanupBatch.commit();
+      }
+
       setShareLink({ id: shareRef.id, createdAt: now, expiresAt });
       onToast({ type: 'success', message: '共有リンクを作成しました' });
     } catch (error) {
       console.error('共有リンクの作成に失敗しました: ', error);
+      if (shareRef) {
+        try {
+          await deleteDoc(shareRef);
+        } catch (cleanupError) {
+          console.error('共有リンクのロールバックに失敗しました: ', cleanupError);
+        }
+      }
       setError(
         '共有リンクの作成に失敗しました。ネットワークを確認して再試行してください。'
       );

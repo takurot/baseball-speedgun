@@ -13,6 +13,21 @@ service cloud.firestore {
       return expiresAt == null || request.time <= expiresAt;
     }
 
+    function getShare(shareId) {
+      return get(/databases/$(database)/documents/shares/$(shareId));
+    }
+
+    function canReadShare(shareId) {
+      let share = getShare(shareId);
+      return share.exists
+        && (isNotExpired(share.data.expiresAt) || isOwner(share.data.ownerUid));
+    }
+
+    function isShareOwner(shareId) {
+      let share = getShare(shareId);
+      return share.exists && isOwner(share.data.ownerUid);
+    }
+
     // usersコレクション以下のドキュメントに対するルール
     match /users/{userId}/{document=**} {
       // 読み取り、書き込みは、認証済みで、かつパスのuserIdが自身のuidと一致する場合のみ許可
@@ -30,6 +45,13 @@ service cloud.firestore {
         && isNotExpired(request.resource.data.expiresAt);
 
       allow delete: if isOwner(resource.data.ownerUid);
+      allow update: if false;
+    }
+
+    // 共有ランキングの推移グラフ（選手ごと）
+    match /shares/{shareId}/charts/{playerName} {
+      allow read: if canReadShare(shareId);
+      allow create, delete: if isShareOwner(shareId);
       allow update: if false;
     }
   }
