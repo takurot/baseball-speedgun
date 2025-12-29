@@ -22,20 +22,20 @@ const AuthLayout: React.FC<AuthLayoutProps> = ({
           <section className="auth-copy card" aria-label="サービス紹介">
             <p className="eyebrow">Baseball Speedgun</p>
             <h1 className="auth-hero-title">
-              一貫したUIで、記録から振り返りまでシームレスに
+              球速を記録して、選手別ランキングで振り返ろう
             </h1>
             <p className="auth-copy-text">
-              ランキングや詳細画面と同じトーンで統一した認証体験。クラウドに保存された球速データへ安心してアクセスできます。
+              投球速度を日付付きで記録し、選手ごとの最高球速ランキングと推移グラフを自動で作成します。練習の成果を残して、次の目標につなげましょう。
             </p>
             <ul className="auth-value-list">
               <li>
-                <strong>統計の見える化</strong> 最高/平均を自動で整理
+                <strong>記録を追加</strong> 選手名・球速・日付をかんたん入力
               </li>
               <li>
-                <strong>どこでも更新</strong> モバイルでも入力しやすい共通フォーム
+                <strong>ランキング</strong> 最高球速で自動並び替え
               </li>
               <li>
-                <strong>安心のフィードバック</strong> 状態とエラーを明確に表示
+                <strong>推移グラフ</strong> 日々の変化とピークをひと目で確認
               </li>
             </ul>
           </section>

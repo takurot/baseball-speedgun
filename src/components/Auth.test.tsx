@@ -16,8 +16,11 @@ test('login form uses shared layout and password toggle', () => {
 
   expect(screen.getByText('Baseball Speedgun')).toBeInTheDocument();
   expect(
-    screen.getByText('一貫したUIで、記録から振り返りまでシームレスに')
+    screen.getByText('球速を記録して、選手別ランキングで振り返ろう')
   ).toBeInTheDocument();
+  expect(screen.getByText('記録を追加')).toBeInTheDocument();
+  expect(screen.getByText('ランキング')).toBeInTheDocument();
+  expect(screen.getByText('推移グラフ')).toBeInTheDocument();
 
   const passwordInput = screen.getByLabelText('パスワード');
   expect(passwordInput).toHaveAttribute('type', 'password');
@@ -39,6 +42,9 @@ test('signup form shares promo copy and hint text', () => {
   expect(screen.getByRole('heading', { name: '新規登録' })).toHaveClass(
     'auth-title'
   );
+  expect(
+    screen.getByText('球速を記録して、選手別ランキングで振り返ろう')
+  ).toBeInTheDocument();
   expect(
     screen.getByText('6文字以上のパスワードを設定してください')
   ).toBeInTheDocument();
