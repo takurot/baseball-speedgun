@@ -44,6 +44,23 @@ const AddRecordModal: React.FC<Props> = ({
   const [recentName, setRecentName] = useState('');
   const [recentDate, setRecentDate] = useState('');
   const nameInputRef = useRef<HTMLInputElement | null>(null);
+  const modalRef = useRef<HTMLDivElement | null>(null);
+
+  const getFocusableElements = React.useCallback(() => {
+    const root = modalRef.current;
+    if (!root) return [];
+    const selectors = [
+      'button:not([disabled])',
+      '[href]',
+      'input:not([disabled])',
+      'select:not([disabled])',
+      'textarea:not([disabled])',
+      '[tabindex]:not([tabindex="-1"])',
+    ];
+    return Array.from(
+      root.querySelectorAll<HTMLElement>(selectors.join(','))
+    ).filter((el) => !el.hasAttribute('aria-hidden'));
+  }, []);
 
   const readStorage = (key: string) => {
     try {
@@ -79,8 +96,13 @@ const AddRecordModal: React.FC<Props> = ({
 
     if (!presetName) {
       scheduleFocus(() => nameInputRef.current?.focus());
+    } else {
+      scheduleFocus(() => {
+        const firstFocusable = getFocusableElements()[0];
+        firstFocusable?.focus();
+      });
     }
-  }, [isOpen, presetName]);
+  }, [getFocusableElements, isOpen, presetName]);
 
   const validateSpeed = (value: string) => {
     if (!value) {
@@ -179,6 +201,33 @@ const AddRecordModal: React.FC<Props> = ({
     Boolean(errors.speed) ||
     Boolean(errors.date);
 
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      onClose();
+      return;
+    }
+
+    if (event.key !== 'Tab') return;
+    const focusableElements = getFocusableElements();
+    if (focusableElements.length === 0) return;
+
+    const currentIndex = focusableElements.indexOf(
+      document.activeElement as HTMLElement
+    );
+    const lastIndex = focusableElements.length - 1;
+    let nextIndex = currentIndex;
+
+    if (event.shiftKey) {
+      nextIndex = currentIndex <= 0 ? lastIndex : currentIndex - 1;
+    } else {
+      nextIndex = currentIndex === lastIndex ? 0 : currentIndex + 1;
+    }
+
+    event.preventDefault();
+    focusableElements[nextIndex]?.focus();
+  };
+
   if (!isOpen) {
     return null;
   }
@@ -190,6 +239,8 @@ const AddRecordModal: React.FC<Props> = ({
         role="dialog"
         aria-modal="true"
         aria-labelledby="add-record-title"
+        ref={modalRef}
+        onKeyDown={handleKeyDown}
       >
         <h2 id="add-record-title">新しい記録を追加</h2>
         <form onSubmit={handleSubmit} className="modal-form" aria-busy={isSubmitting}>

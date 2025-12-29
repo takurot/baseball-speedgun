@@ -3,9 +3,9 @@
   --color-bg-end: #e9f2ff;
   --color-surface: #ffffff;
   --color-surface-muted: #f8fafc;
-  --color-border: #e2e8f0;
+  --color-border: #cbd5e1;
   --color-text: #1f2937;
-  --color-muted: #6b7280;
+  --color-muted: #4b5563;
   --color-primary: #2563eb;
   --color-primary-strong: #1d4ed8;
   --color-accent: #f97316;
@@ -112,11 +112,12 @@ code {
   align-items: center;
   justify-content: center;
   gap: var(--space-2);
-  padding: 10px 18px;
+  padding: 12px 18px;
   border-radius: var(--radius-pill);
   border: 1px solid transparent;
   font-weight: 600;
   cursor: pointer;
+  min-height: 44px;
   transition: transform var(--transition-base),
     box-shadow var(--transition-base), background var(--transition-base),
     border-color var(--transition-base), color var(--transition-base);
@@ -164,15 +165,17 @@ code {
   padding: 6px 12px;
   border-radius: var(--radius-md);
   font-size: 0.9rem;
+  min-height: 38px;
 }
 
 .input {
   width: 100%;
-  padding: 10px 12px;
+  padding: 12px 12px;
   border-radius: var(--radius-md);
   border: 1px solid var(--color-border);
   background: #ffffff;
   color: var(--color-text);
+  min-height: 44px;
   transition: border-color var(--transition-base),
     box-shadow var(--transition-base);
 }
@@ -212,8 +215,8 @@ code {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   border-radius: var(--radius-pill);
   border: 1px solid transparent;
   background: var(--color-surface-muted);
