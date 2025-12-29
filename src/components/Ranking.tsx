@@ -13,6 +13,7 @@ import {
 } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
 import AddRecordModal from './AddRecordModal';
+import ShareRankingModal from './ShareRankingModal';
 import { SPEED_MAX, SPEED_MIN } from '../constants';
 
 interface Player {
@@ -64,6 +65,7 @@ const buildRanks = (players: Player[]): RankedPlayer[] => {
 const Ranking = () => {
   const [players, setPlayers] = useState<Player[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [presetName, setPresetName] = useState<string | undefined>();
   const [searchTerm, setSearchTerm] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('speed');
@@ -248,6 +250,31 @@ const Ranking = () => {
     });
   }, [players, periodFilter, searchTerm]);
 
+  const shareSourcePlayers = useMemo(() => {
+    return players.filter((player) => isWithinPeriod(player.updatedAt, periodFilter));
+  }, [players, periodFilter]);
+
+  const sharePlayers = useMemo(() => {
+    return buildRanks(shareSourcePlayers).map((player) => ({
+      rank: player.rank,
+      name: player.name,
+      speed: player.speed,
+      updatedAt: player.updatedAt,
+    }));
+  }, [shareSourcePlayers]);
+
+  const shareStats = useMemo(() => {
+    if (shareSourcePlayers.length === 0) {
+      return { topSpeed: null, averageSpeed: null, playerCount: 0 };
+    }
+    const speeds = shareSourcePlayers.map((player) => player.speed);
+    const topSpeed = Math.max(...speeds);
+    const averageSpeed =
+      Math.round((speeds.reduce((sum, speed) => sum + speed, 0) / speeds.length) * 10) /
+      10;
+    return { topSpeed, averageSpeed, playerCount: shareSourcePlayers.length };
+  }, [shareSourcePlayers]);
+
   const rankedPlayers = useMemo(
     () => buildRanks(filteredPlayers),
     [filteredPlayers]
@@ -305,6 +332,15 @@ const Ranking = () => {
           </p>
         </div>
         <div className="ranking-actions">
+          <button
+            type="button"
+            onClick={() => setIsShareModalOpen(true)}
+            className="btn btn-ghost"
+            aria-label="ランキングを共有"
+            disabled={isLoading}
+          >
+            共有
+          </button>
           <button onClick={handleLogout} className="btn btn-ghost">
             ログアウト
           </button>
@@ -521,6 +557,15 @@ const Ranking = () => {
         presetName={presetName}
         suggestedNames={nameSuggestions}
       />
+      {currentUser && (
+        <ShareRankingModal
+          isOpen={isShareModalOpen}
+          onClose={() => setIsShareModalOpen(false)}
+          ownerUid={currentUser.uid}
+          snapshot={{ periodFilter, players: sharePlayers, stats: shareStats }}
+          onToast={showToast}
+        />
+      )}
       {toast && (
         <div className="toast-container" aria-live="polite">
           <div

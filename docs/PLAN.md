@@ -103,7 +103,7 @@
   - 共有リンクを作成して他者に送れる
   - 共有リンクを開いた第三者がログインなしでランキングを閲覧できる
   - 無効/期限切れが適切に案内される
-- ステータス: ⬜️
+- ステータス: ✅
 
 ## 依存関係
 - PR-01完了後にPR-02〜05を並行実装
@@ -132,7 +132,7 @@
 - PR-05 ✅ 認証画面を共通レイアウト・価値訴求コピー付きに刷新し、パスワード表示切替と統一エラーメッセージを実装
 - PR-06 ✅ モーダルにフォーカストラップとEscape閉じる操作を追加し、ボタン/フィルタの44pxタップ領域とコントラスト（muted色・ボーダー）を強化、モバイルFAB/行アクションのレイアウトを調整
 - PR-07a ✅ HostingのSPAルーティング（直リンク/リロード）対応（`/ranking` 404解消）
-- PR-07 ⬜️ ランキング共有（リンク作成/共有ページ/無効化/有効期限）を追加
+- PR-07 ✅ ランキング共有（共有モーダル: 期限/コピー/OS共有/無効化）と、閲覧専用ページ `/share/:shareId`・Firestore共有スナップショット（公開 get + オーナー作成/削除）を実装
 
 ## Tests
 - 成功: `npm test -- --watchAll=false` (PR-05 認証UI)
@@ -142,3 +142,8 @@
 - 成功: Playwright MCP で https://baseball-speedgun-app.web.app の選手詳細（サマリー/期間フィルタ/削除Undo）を新規アカウントで確認
 - 成功: Playwright MCP で https://baseball-speedgun-app.web.app の認証画面（価値訴求/パスワード表示切替/新規登録フロー）を確認
 - 成功: Playwright MCP で https://baseball-speedgun-app.web.app の記録追加モーダル（フォーカストラップ/タブ循環/新規登録→記録追加→ログアウト）を確認
+- 成功: `npm test -- --watchAll=false` (PR-07 ランキング共有)
+- 成功: `npm run build` (PR-07 ランキング共有)
+- 成功: `firebase deploy --only firestore:rules` (PR-07 共有ルール)
+- 成功: `firebase deploy --only hosting` (PR-07)
+- 成功: Playwright MCP で https://baseball-speedgun-app.web.app の共有リンク作成→共有ページ閲覧（ログイン不要）→無効化→無効リンクの案内を確認

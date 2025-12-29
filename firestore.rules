@@ -1,10 +1,36 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(ownerUid) {
+      return isSignedIn() && request.auth.uid == ownerUid;
+    }
+
+    function isNotExpired(expiresAt) {
+      return expiresAt == null || request.time <= expiresAt;
+    }
+
     // usersコレクション以下のドキュメントに対するルール
     match /users/{userId}/{document=**} {
       // 読み取り、書き込みは、認証済みで、かつパスのuserIdが自身のuidと一致する場合のみ許可
       allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // 共有ランキング（スナップショット）
+    match /shares/{shareId} {
+      // 共有リンクは「知っている人だけが読める」を想定し、公開は get のみに限定
+      allow get: if isNotExpired(resource.data.expiresAt) || isOwner(resource.data.ownerUid);
+      allow list: if isOwner(resource.data.ownerUid);
+
+      allow create: if isSignedIn()
+        && request.resource.data.ownerUid == request.auth.uid
+        && isNotExpired(request.resource.data.expiresAt);
+
+      allow delete: if isOwner(resource.data.ownerUid);
+      allow update: if false;
     }
   }
 } 
