@@ -100,3 +100,21 @@ test('validates speed range and disables submit when invalid', async () => {
   await screen.findByRole('button', { name: '追加' }); // wait for submit to settle
   expect(onSubmit).toHaveBeenCalledWith('Yamada', '150', '2024-12-01');
 });
+
+test('traps focus within the modal and supports escape to close', async () => {
+  const handleClose = jest.fn();
+  render(<AddRecordModal isOpen={true} onClose={handleClose} onSubmit={jest.fn()} />);
+
+  const dateInput = screen.getByLabelText('日付');
+  const cancelButton = screen.getByRole('button', { name: 'キャンセル' });
+
+  dateInput.focus();
+  await userEvent.tab({ shift: true });
+  expect(cancelButton).toHaveFocus();
+
+  await userEvent.tab();
+  expect(dateInput).toHaveFocus();
+
+  await userEvent.keyboard('{Escape}');
+  expect(handleClose).toHaveBeenCalled();
+});
