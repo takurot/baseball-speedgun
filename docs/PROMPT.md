@@ -77,6 +77,7 @@ firebase deploy --only hosting
 
 - Firestore ルールを変更した場合は `firebase deploy --only firestore:rules`
 - 初回のみ `firebase login` と `firebase use <project-id>` を実行
+- デプロイ後は Playwright MCP で本番 URL を E2E デバッグすること
 
 ## チェックリスト
 
