@@ -1,4 +1,4 @@
-import { act, render, screen, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import Ranking from './Ranking';
@@ -12,6 +12,16 @@ jest.mock('./ShareRankingModal', () => () => null);
 
 const mockOnAuthStateChanged = jest.fn();
 const mockOnSnapshot = jest.fn();
+const mockCollection = jest.fn();
+const mockDoc = jest.fn();
+const mockDeleteField = jest.fn();
+const mockGetDoc = jest.fn();
+const mockGetDocs = jest.fn();
+const mockQuery = jest.fn();
+const mockBatchDelete = jest.fn();
+const mockBatchSet = jest.fn();
+const mockBatchCommit = jest.fn();
+const mockWriteBatch = jest.fn();
 
 jest.mock('firebase/auth', () => ({
   onAuthStateChanged: (...args: unknown[]) => mockOnAuthStateChanged(...args),
@@ -19,18 +29,15 @@ jest.mock('firebase/auth', () => ({
 }));
 
 jest.mock('firebase/firestore', () => ({
-  collection: jest.fn(() => ({})),
-  deleteField: jest.fn(() => 'DELETE_FIELD'),
-  doc: jest.fn(() => ({})),
-  getDoc: jest.fn(),
-  getDocs: jest.fn(),
+  collection: (...args: unknown[]) => mockCollection(...args),
+  deleteField: (...args: unknown[]) => mockDeleteField(...args),
+  doc: (...args: unknown[]) => mockDoc(...args),
+  getDoc: (...args: unknown[]) => mockGetDoc(...args),
+  getDocs: (...args: unknown[]) => mockGetDocs(...args),
   onSnapshot: (...args: unknown[]) => mockOnSnapshot(...args),
-  query: jest.fn(() => ({})),
+  query: (...args: unknown[]) => mockQuery(...args),
   setDoc: jest.fn(),
-  writeBatch: jest.fn(() => ({
-    delete: jest.fn(),
-    commit: jest.fn().mockResolvedValue(undefined),
-  })),
+  writeBatch: (...args: unknown[]) => mockWriteBatch(...args),
 }));
 
 let snapshotListener: ((snapshot: { forEach: (cb: (doc: any) => void) => void }) => void) | null =
@@ -77,6 +84,27 @@ const createSnapshot = (
 beforeEach(() => {
   jest.clearAllMocks();
   snapshotListener = null;
+  mockCollection.mockImplementation((_db, path) => ({ path }));
+  mockDoc.mockImplementation((_db, path, id) => ({
+    path: id ? `${path}/${id}` : path,
+  }));
+  mockDeleteField.mockReturnValue('DELETE_FIELD');
+  mockGetDoc.mockResolvedValue({
+    exists: () => true,
+    data: () => ({
+      name: 'Sato',
+      speed: 150,
+      updatedAt: { toDate: () => new Date('2024-06-01') },
+    }),
+  });
+  mockQuery.mockImplementation((collectionRef) => collectionRef);
+  mockGetDocs.mockResolvedValue(createQuerySnapshot([]));
+  mockWriteBatch.mockReturnValue({
+    delete: mockBatchDelete,
+    set: mockBatchSet,
+    commit: mockBatchCommit,
+  });
+  mockBatchCommit.mockResolvedValue(undefined);
   mockOnAuthStateChanged.mockImplementation((_auth, callback) => {
     callback({ uid: 'user-1' });
     return jest.fn();
@@ -85,6 +113,25 @@ beforeEach(() => {
     snapshotListener = onSuccess;
     return jest.fn();
   });
+});
+
+afterEach(() => {
+  jest.restoreAllMocks();
+});
+
+const createRecordDoc = (id: string, speed: number, date: Date) => ({
+  id,
+  ref: { path: `record/${id}` },
+  data: () => ({
+    speed,
+    date: { toDate: () => date },
+  }),
+});
+
+const createQuerySnapshot = (docs: ReturnType<typeof createRecordDoc>[]) => ({
+  docs,
+  forEach: (callback: (doc: ReturnType<typeof createRecordDoc>) => void) =>
+    docs.forEach(callback),
 });
 
 test('switches between pitch and swing rankings with matching labels', async () => {
@@ -157,4 +204,59 @@ test('switches between pitch and swing rankings with matching labels', async () 
 
   await userEvent.click(screen.getByRole('button', { name: '記録を追加' }));
   expect(screen.getByLabelText('スイングスピード (km/h)')).toBeInTheDocument();
+});
+
+test('keeps player document and restores swing summary when deleting pitch records with swing subcollection data', async () => {
+  jest.spyOn(window, 'confirm').mockReturnValue(true);
+  mockGetDocs.mockImplementation((queryRef?: { path?: string }) => {
+    if (queryRef?.path?.endsWith('/records')) {
+      return Promise.resolve(
+        createQuerySnapshot([
+          createRecordDoc('2024-06-01', 150, new Date('2024-06-01')),
+        ])
+      );
+    }
+    if (queryRef?.path?.endsWith('/swingRecords')) {
+      return Promise.resolve(
+        createQuerySnapshot([
+          createRecordDoc('2024-06-02', 132, new Date('2024-06-02')),
+          createRecordDoc('2024-06-03', 128, new Date('2024-06-03')),
+        ])
+      );
+    }
+    return Promise.resolve(createQuerySnapshot([]));
+  });
+
+  renderRanking();
+
+  await act(async () => {
+    snapshotListener?.(
+      createSnapshot([
+        {
+          id: 'Sato',
+          name: 'Sato',
+          speed: 150,
+          updatedAt: new Date('2024-06-01'),
+        },
+      ])
+    );
+  });
+
+  await userEvent.click(screen.getByRole('button', { name: 'Satoを削除' }));
+
+  await waitFor(() => expect(mockBatchCommit).toHaveBeenCalled());
+  expect(mockBatchDelete).not.toHaveBeenCalledWith({
+    path: 'users/user-1/players/Sato',
+  });
+  expect(mockBatchSet).toHaveBeenCalledWith(
+    { path: 'users/user-1/players/Sato' },
+    {
+      name: 'Sato',
+      speed: 'DELETE_FIELD',
+      updatedAt: 'DELETE_FIELD',
+      swingSpeed: 132,
+      swingUpdatedAt: new Date('2024-06-03'),
+    },
+    { merge: true }
+  );
 });

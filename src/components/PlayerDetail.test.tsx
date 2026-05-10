@@ -1,4 +1,4 @@
-import { act, render, screen, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import PlayerDetail from './PlayerDetail';
@@ -10,9 +10,13 @@ jest.mock('../firebase', () => ({
 
 const mockOnAuthStateChanged = jest.fn();
 const mockOnSnapshot = jest.fn();
-const mockCollection = jest.fn(() => ({}));
+const mockCollection = jest.fn();
+const mockDoc = jest.fn();
+const mockDeleteField = jest.fn();
 const mockDeleteDoc = jest.fn();
 const mockGetDoc = jest.fn();
+const mockGetDocs = jest.fn();
+const mockQuery = jest.fn();
 const mockSetDoc = jest.fn();
 
 jest.mock('firebase/auth', () => ({
@@ -21,13 +25,14 @@ jest.mock('firebase/auth', () => ({
 
 jest.mock('firebase/firestore', () => ({
   collection: (...args: unknown[]) => mockCollection.apply(null, args),
-  deleteField: jest.fn(() => 'DELETE_FIELD'),
-  query: jest.fn(() => ({})),
+  deleteField: (...args: unknown[]) => mockDeleteField(...args),
+  query: (...args: unknown[]) => mockQuery(...args),
   orderBy: jest.fn(() => ({})),
-  doc: jest.fn(() => ({})),
+  doc: (...args: unknown[]) => mockDoc(...args),
   onSnapshot: (...args: unknown[]) => mockOnSnapshot(...args),
   deleteDoc: (...args: unknown[]) => mockDeleteDoc(...args),
   getDoc: (...args: unknown[]) => mockGetDoc(...args),
+  getDocs: (...args: unknown[]) => mockGetDocs(...args),
   setDoc: (...args: unknown[]) => mockSetDoc(...args),
 }));
 
@@ -74,6 +79,11 @@ const createSnapshot = (
 beforeEach(() => {
   jest.clearAllMocks();
   snapshotListener = null;
+  mockCollection.mockImplementation((_db, path) => ({ path }));
+  mockDoc.mockImplementation((_db, path, id) => ({
+    path: id ? `${path}/${id}` : path,
+  }));
+  mockDeleteField.mockReturnValue('DELETE_FIELD');
   mockOnAuthStateChanged.mockImplementation((_auth, callback) => {
     callback({ uid: 'user-1' });
     return jest.fn();
@@ -84,6 +94,8 @@ beforeEach(() => {
   });
   mockDeleteDoc.mockResolvedValue(undefined);
   mockSetDoc.mockResolvedValue(undefined);
+  mockGetDocs.mockResolvedValue(createDocsSnapshot([]));
+  mockQuery.mockImplementation((collectionRef) => collectionRef);
   mockGetDoc.mockResolvedValue({
     exists: () => true,
     data: () => ({
@@ -92,6 +104,20 @@ beforeEach(() => {
       name: 'Sato',
     }),
   });
+});
+
+const createRecordDoc = (id: string, speed: number, date: Date) => ({
+  id,
+  data: () => ({
+    speed,
+    date: { toDate: () => date },
+  }),
+});
+
+const createDocsSnapshot = (docs: ReturnType<typeof createRecordDoc>[]) => ({
+  docs,
+  forEach: (callback: (doc: ReturnType<typeof createRecordDoc>) => void) =>
+    docs.forEach(callback),
 });
 
 test('loads swing speed records when the route measurement is swing', async () => {
@@ -189,4 +215,49 @@ test('sorts records and shows undo snackbar after delete', async () => {
 
   expect(await screen.findByText('取り消す')).toBeInTheDocument();
   expect(mockDeleteDoc).toHaveBeenCalled();
+});
+
+test('keeps player document and restores swing summary when deleting final pitch record with swing subcollection data', async () => {
+  mockGetDocs.mockImplementation((queryRef?: { path?: string }) => {
+    if (queryRef?.path?.endsWith('/swingRecords')) {
+      return Promise.resolve(
+        createDocsSnapshot([
+          createRecordDoc('2024-05-01', 128, new Date('2024-05-01')),
+          createRecordDoc('2024-05-03', 132, new Date('2024-05-03')),
+        ])
+      );
+    }
+    return Promise.resolve(createDocsSnapshot([]));
+  });
+
+  renderWithRouter();
+
+  await act(async () => {
+    snapshotListener?.(
+      createSnapshot([
+        { id: '2024-05-02', speed: 150, date: new Date('2024-05-02') },
+      ])
+    );
+  });
+
+  await act(async () => {
+    await userEvent.click(screen.getByRole('button', { name: '削除' }));
+  });
+
+  await waitFor(() =>
+    expect(mockSetDoc).toHaveBeenCalledWith(
+      { path: 'users/user-1/players/Sato' },
+      {
+        name: 'Sato',
+        speed: 'DELETE_FIELD',
+        updatedAt: 'DELETE_FIELD',
+        swingSpeed: 132,
+        swingUpdatedAt: new Date('2024-05-03'),
+      },
+      { merge: true }
+    )
+  );
+  expect(mockDeleteDoc).not.toHaveBeenCalledWith({
+    path: 'users/user-1/players/Sato',
+  });
 });

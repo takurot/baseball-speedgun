@@ -17,6 +17,11 @@ import AddRecordModal from './AddRecordModal';
 import ShareRankingModal from './ShareRankingModal';
 import { SPEED_MAX, SPEED_MIN } from '../constants';
 import { MEASUREMENT_TYPES, MeasurementType, getMeasurement } from '../measurements';
+import {
+  MeasurementRecordSummary,
+  buildPlayerRetentionPatch,
+  summarizeMeasurementRecords,
+} from '../measurementRecordSummary';
 
 interface Player {
   id: string;
@@ -62,6 +67,35 @@ const buildRanks = (players: Player[]): RankedPlayer[] => {
     }
     return { ...player, rank };
   });
+};
+
+const loadOtherMeasurementSummaries = async (
+  uid: string,
+  playerName: string,
+  activeMeasurement: MeasurementType
+) => {
+  const entries = await Promise.all(
+    MEASUREMENT_TYPES.filter((type) => type !== activeMeasurement).map(
+      async (type) => {
+        const otherMeasurement = getMeasurement(type);
+        const recordsSnapshot = await getDocs(
+          query(
+            collection(
+              db,
+              `users/${uid}/players/${playerName}/${otherMeasurement.recordsCollection}`
+            )
+          )
+        );
+        return [
+          type,
+          summarizeMeasurementRecords(recordsSnapshot.docs),
+        ] as const;
+      }
+    )
+  );
+  return Object.fromEntries(entries) as Partial<
+    Record<MeasurementType, MeasurementRecordSummary | null>
+  >;
 };
 
 const Ranking = () => {
@@ -255,19 +289,23 @@ const Ranking = () => {
 
       const playerSnap = await getDoc(playerRef);
       const playerData = playerSnap.exists() ? playerSnap.data() : null;
-      const hasOtherMeasurement = MEASUREMENT_TYPES.some((type) => {
-        if (type === activeMeasurement || !playerData) return false;
-        const otherMeasurement = getMeasurement(type);
-        return typeof playerData[otherMeasurement.valueField] === 'number';
+      const otherRecordSummaries = await loadOtherMeasurementSummaries(
+        currentUser.uid,
+        playerName,
+        activeMeasurement
+      );
+      const retentionPatch = buildPlayerRetentionPatch({
+        playerName,
+        playerData,
+        activeMeasurement,
+        otherRecordSummaries,
+        deleteFieldValue: deleteField(),
       });
 
-      if (hasOtherMeasurement) {
+      if (retentionPatch) {
         batch.set(
           playerRef,
-          {
-            [measurement.valueField]: deleteField(),
-            [measurement.updatedAtField]: deleteField(),
-          },
+          retentionPatch,
           { merge: true }
         );
       } else {

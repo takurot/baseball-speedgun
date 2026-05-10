@@ -10,6 +10,7 @@ import {
   doc,
   deleteDoc,
   getDoc,
+  getDocs,
   setDoc,
   deleteField,
 } from 'firebase/firestore';
@@ -30,7 +31,13 @@ import {
   MEASUREMENT_TYPES,
   getMeasurement,
   isMeasurementType,
+  MeasurementType,
 } from '../measurements';
+import {
+  MeasurementRecordSummary,
+  buildPlayerRetentionPatch,
+  summarizeMeasurementRecords,
+} from '../measurementRecordSummary';
 
 ChartJS.register(
   CategoryScale,
@@ -67,6 +74,35 @@ const isWithinPeriod = (date: Date, filter: PeriodFilter) => {
   threshold.setHours(0, 0, 0, 0);
   threshold.setDate(threshold.getDate() - (days - 1));
   return date >= threshold;
+};
+
+const loadOtherMeasurementSummaries = async (
+  uid: string,
+  playerName: string,
+  activeMeasurement: MeasurementType
+) => {
+  const entries = await Promise.all(
+    MEASUREMENT_TYPES.filter((type) => type !== activeMeasurement).map(
+      async (type) => {
+        const otherMeasurement = getMeasurement(type);
+        const recordsSnapshot = await getDocs(
+          query(
+            collection(
+              db,
+              `users/${uid}/players/${playerName}/${otherMeasurement.recordsCollection}`
+            )
+          )
+        );
+        return [
+          type,
+          summarizeMeasurementRecords(recordsSnapshot.docs),
+        ] as const;
+      }
+    )
+  );
+  return Object.fromEntries(entries) as Partial<
+    Record<MeasurementType, MeasurementRecordSummary | null>
+  >;
 };
 
 const PlayerDetail = () => {
@@ -301,19 +337,23 @@ const PlayerDetail = () => {
       const remainingRecords = records.filter((record) => record.id !== recordId);
       if (remainingRecords.length === 0) {
         const playerData = playerSnap.exists() ? playerSnap.data() : null;
-        const hasOtherMeasurement = MEASUREMENT_TYPES.some((type) => {
-          if (type === activeMeasurement || !playerData) return false;
-          const otherMeasurement = getMeasurement(type);
-          return typeof playerData[otherMeasurement.valueField] === 'number';
+        const otherRecordSummaries = await loadOtherMeasurementSummaries(
+          currentUser.uid,
+          name,
+          activeMeasurement
+        );
+        const retentionPatch = buildPlayerRetentionPatch({
+          playerName: name,
+          playerData,
+          activeMeasurement,
+          otherRecordSummaries,
+          deleteFieldValue: deleteField(),
         });
 
-        if (hasOtherMeasurement) {
+        if (retentionPatch) {
           await setDoc(
             playerRef,
-            {
-              [measurement.valueField]: deleteField(),
-              [measurement.updatedAtField]: deleteField(),
-            },
+            retentionPatch,
             { merge: true }
           );
         } else {
