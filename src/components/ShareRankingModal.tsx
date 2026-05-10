@@ -10,6 +10,11 @@ import {
   where,
   writeBatch,
 } from 'firebase/firestore';
+import {
+  MeasurementType,
+  getMeasurement,
+  isMeasurementType,
+} from '../measurements';
 
 type PeriodFilter = 'all' | '30' | '7';
 
@@ -29,6 +34,7 @@ type SnapshotStats = {
 };
 
 type RankingSnapshot = {
+  measurementType: MeasurementType;
   periodFilter: PeriodFilter;
   players: SnapshotPlayer[];
   stats: SnapshotStats;
@@ -40,6 +46,7 @@ type ShareLink = {
   id: string;
   createdAt: Date | null;
   expiresAt: Date | null;
+  measurementType: MeasurementType;
 };
 
 interface Props {
@@ -88,16 +95,8 @@ const addDays = (base: Date, days: number) => {
   return next;
 };
 
-const MAX_CHART_RECORDS = 60;
-
-const getPeriodThreshold = (filter: PeriodFilter) => {
-  if (filter === 'all') return null;
-  const days = filter === '30' ? 30 : 7;
-  const threshold = new Date();
-  threshold.setHours(0, 0, 0, 0);
-  threshold.setDate(threshold.getDate() - (days - 1));
-  return threshold;
-};
+const parseMeasurementType = (value: unknown): MeasurementType =>
+  typeof value === 'string' && isMeasurementType(value) ? value : 'pitch';
 
 const copyToClipboard = async (text: string) => {
   if (navigator.clipboard?.writeText) {
@@ -131,6 +130,7 @@ const ShareRankingModal: React.FC<Props> = ({
   const [error, setError] = useState<string | null>(null);
   const modalRef = useRef<HTMLDivElement | null>(null);
   const linkInputRef = useRef<HTMLInputElement | null>(null);
+  const measurement = getMeasurement(snapshot.measurementType);
 
   const shareUrl = useMemo(
     () => (shareLink ? buildShareUrl(shareLink.id) : ''),
@@ -170,16 +170,18 @@ const ShareRankingModal: React.FC<Props> = ({
         collection(db, 'shares'),
         where('ownerUid', '==', ownerUid)
       );
-      const snapshot = await getDocs(q);
-      const links: ShareLink[] = snapshot.docs
+      const querySnapshot = await getDocs(q);
+      const links: ShareLink[] = querySnapshot.docs
         .map((docSnap) => {
           const data = docSnap.data();
           return {
             id: docSnap.id,
             createdAt: toDate(data.createdAt),
             expiresAt: toDate(data.expiresAt),
+            measurementType: parseMeasurementType(data.measurementType),
           };
         })
+        .filter((link) => link.measurementType === snapshot.measurementType)
         .sort((a, b) => {
           const aTime = a.createdAt?.getTime() ?? 0;
           const bTime = b.createdAt?.getTime() ?? 0;
@@ -192,7 +194,7 @@ const ShareRankingModal: React.FC<Props> = ({
     } finally {
       setIsLoading(false);
     }
-  }, [ownerUid]);
+  }, [ownerUid, snapshot.measurementType]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -236,6 +238,7 @@ const ShareRankingModal: React.FC<Props> = ({
       batch.set(shareRef, {
         version: 2,
         ownerUid,
+        measurementType: snapshot.measurementType,
         createdAt: serverTimestamp(),
         expiresAt,
         periodFilter: snapshot.periodFilter,
@@ -248,12 +251,22 @@ const ShareRankingModal: React.FC<Props> = ({
         })),
       });
 
-      // 古い共有リンクを削除
-      existing.docs.forEach((docSnap) => batch.delete(docSnap.ref));
+      // 同じ測定種別の古い共有リンクだけを削除
+      existing.docs.forEach((docSnap) => {
+        const data = docSnap.data();
+        if (parseMeasurementType(data.measurementType) === snapshot.measurementType) {
+          batch.delete(docSnap.ref);
+        }
+      });
 
       await batch.commit();
 
-      setShareLink({ id: shareRef.id, createdAt: now, expiresAt });
+      setShareLink({
+        id: shareRef.id,
+        createdAt: now,
+        expiresAt,
+        measurementType: snapshot.measurementType,
+      });
       onToast({ type: 'success', message: '共有リンクを作成しました' });
     } catch (error) {
       console.error('共有リンクの作成に失敗しました: ', error);
@@ -316,8 +329,8 @@ const ShareRankingModal: React.FC<Props> = ({
 
     try {
       await (navigator as any).share({
-        title: 'スピードガンランキング',
-        text: 'スピードガンランキング（閲覧専用）',
+        title: `${measurement.label}ランキング`,
+        text: `${measurement.label}ランキング（閲覧専用）`,
         url: shareUrl,
       });
       onToast({ type: 'success', message: '共有を開始しました' });
@@ -374,7 +387,8 @@ const ShareRankingModal: React.FC<Props> = ({
         <h2 id="share-ranking-title">ランキングを共有</h2>
         <div className="modal-form" aria-busy={isSubmitting || isLoading}>
           <p className="subtle-text share-description">
-            このリンクを知っている人はログインなしで閲覧できます。元データ（/users 配下）は公開されません。
+            {measurement.label}ランキングの閲覧専用リンクを作成します。このリンクを知っている人はログインなしで閲覧できます。
+            元データ（/users 配下）は公開されません。
           </p>
 
           <div className="form-field">
@@ -393,7 +407,7 @@ const ShareRankingModal: React.FC<Props> = ({
               <option value="none">無期限</option>
             </select>
             <p className="input-hint">
-              共有対象: {periodLabel[snapshot.periodFilter]} のランキング
+              共有対象: {measurement.label} / {periodLabel[snapshot.periodFilter]} のランキング
             </p>
           </div>
 
@@ -413,6 +427,7 @@ const ShareRankingModal: React.FC<Props> = ({
                   ref={linkInputRef}
                 />
                 <p className="input-hint">
+                  共有中: {getMeasurement(shareLink.measurementType).label} /{' '}
                   {isExpired
                     ? 'このリンクは期限切れです。再発行してください。'
                     : shareLink.expiresAt

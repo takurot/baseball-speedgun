@@ -10,7 +10,9 @@ import {
   doc,
   deleteDoc,
   getDoc,
+  getDocs,
   setDoc,
+  deleteField,
 } from 'firebase/firestore';
 import { Line } from 'react-chartjs-2';
 import {
@@ -25,6 +27,17 @@ import {
   ChartOptions,
   ChartData,
 } from 'chart.js';
+import {
+  MEASUREMENT_TYPES,
+  getMeasurement,
+  isMeasurementType,
+  MeasurementType,
+} from '../measurements';
+import {
+  MeasurementRecordSummary,
+  buildPlayerRetentionPatch,
+  summarizeMeasurementRecords,
+} from '../measurementRecordSummary';
 
 ChartJS.register(
   CategoryScale,
@@ -63,8 +76,47 @@ const isWithinPeriod = (date: Date, filter: PeriodFilter) => {
   return date >= threshold;
 };
 
+const loadOtherMeasurementSummaries = async (
+  uid: string,
+  playerName: string,
+  activeMeasurement: MeasurementType
+) => {
+  const entries = await Promise.all(
+    MEASUREMENT_TYPES.filter((type) => type !== activeMeasurement).map(
+      async (type) => {
+        const otherMeasurement = getMeasurement(type);
+        const recordsSnapshot = await getDocs(
+          query(
+            collection(
+              db,
+              `users/${uid}/players/${playerName}/${otherMeasurement.recordsCollection}`
+            )
+          )
+        );
+        return [
+          type,
+          summarizeMeasurementRecords(recordsSnapshot.docs),
+        ] as const;
+      }
+    )
+  );
+  return Object.fromEntries(entries) as Partial<
+    Record<MeasurementType, MeasurementRecordSummary | null>
+  >;
+};
+
 const PlayerDetail = () => {
-  const { name } = useParams<{ name: string }>();
+  const { name, measurementType } = useParams<{
+    name: string;
+    measurementType?: string;
+  }>();
+  const activeMeasurement = isMeasurementType(measurementType)
+    ? measurementType
+    : 'pitch';
+  const measurement = useMemo(
+    () => getMeasurement(activeMeasurement),
+    [activeMeasurement]
+  );
   const [records, setRecords] = useState<PlayerRecord[]>([]);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -95,7 +147,10 @@ const PlayerDetail = () => {
     if (!name || !currentUser) return;
     setIsLoading(true);
     const q = query(
-      collection(db, `users/${currentUser.uid}/players/${name}/records`),
+      collection(
+        db,
+        `users/${currentUser.uid}/players/${name}/${measurement.recordsCollection}`
+      ),
       orderBy('date', 'asc')
     );
     const unsub = onSnapshot(
@@ -121,7 +176,7 @@ const PlayerDetail = () => {
       }
     );
     return () => unsub();
-  }, [name, currentUser]);
+  }, [name, currentUser, measurement]);
 
   useEffect(() => {
     return () => {
@@ -187,7 +242,7 @@ const PlayerDetail = () => {
       labels,
       datasets: [
         {
-          label: '球速 (km/h)',
+          label: `${measurement.label} (km/h)`,
           data: chartRecords.map((record) => record.speed),
           borderColor: 'rgba(37, 99, 235, 0.8)',
           backgroundColor: 'rgba(37, 99, 235, 0.12)',
@@ -206,7 +261,7 @@ const PlayerDetail = () => {
         },
       ],
     };
-  }, [chartRecords]);
+  }, [chartRecords, measurement.label]);
 
   const chartOptions: ChartOptions<'line'> = useMemo(
     () => ({
@@ -224,7 +279,7 @@ const PlayerDetail = () => {
         },
         title: {
           display: true,
-          text: `${name ?? ''} の球速推移`,
+          text: `${name ?? ''} の${measurement.label}推移`,
           align: 'start',
           color: '#1f2937',
         },
@@ -242,7 +297,7 @@ const PlayerDetail = () => {
         },
       },
     }),
-    [name]
+    [measurement.label, name]
   );
 
   const clearUndoTimer = () => {
@@ -262,16 +317,16 @@ const PlayerDetail = () => {
     try {
       const recordRef = doc(
         db,
-        `users/${currentUser.uid}/players/${name}/records`,
+        `users/${currentUser.uid}/players/${name}/${measurement.recordsCollection}`,
         recordId
       );
       const playerRef = doc(db, `users/${currentUser.uid}/players`, name);
       const playerSnap = await getDoc(playerRef);
       const playerSnapshot: PlayerSnapshot = playerSnap.exists()
         ? {
-            speed: playerSnap.data().speed ?? null,
-            updatedAt: playerSnap.data().updatedAt?.toDate
-              ? playerSnap.data().updatedAt.toDate()
+            speed: playerSnap.data()[measurement.valueField] ?? null,
+            updatedAt: playerSnap.data()[measurement.updatedAtField]?.toDate
+              ? playerSnap.data()[measurement.updatedAtField].toDate()
               : null,
             name: playerSnap.data().name,
           }
@@ -281,7 +336,29 @@ const PlayerDetail = () => {
 
       const remainingRecords = records.filter((record) => record.id !== recordId);
       if (remainingRecords.length === 0) {
-        await deleteDoc(playerRef);
+        const playerData = playerSnap.exists() ? playerSnap.data() : null;
+        const otherRecordSummaries = await loadOtherMeasurementSummaries(
+          currentUser.uid,
+          name,
+          activeMeasurement
+        );
+        const retentionPatch = buildPlayerRetentionPatch({
+          playerName: name,
+          playerData,
+          activeMeasurement,
+          otherRecordSummaries,
+          deleteFieldValue: deleteField(),
+        });
+
+        if (retentionPatch) {
+          await setDoc(
+            playerRef,
+            retentionPatch,
+            { merge: true }
+          );
+        } else {
+          await deleteDoc(playerRef);
+        }
       } else {
         const maxSpeed = Math.max(...remainingRecords.map((record) => record.speed));
         const latestDate = remainingRecords.reduce(
@@ -291,7 +368,10 @@ const PlayerDetail = () => {
         );
         await setDoc(
           playerRef,
-          { speed: maxSpeed, updatedAt: latestDate },
+          {
+            [measurement.valueField]: maxSpeed,
+            [measurement.updatedAtField]: latestDate,
+          },
           { merge: true }
         );
       }
@@ -314,7 +394,7 @@ const PlayerDetail = () => {
     try {
       const recordRef = doc(
         db,
-        `users/${currentUser.uid}/players/${name}/records`,
+        `users/${currentUser.uid}/players/${name}/${measurement.recordsCollection}`,
         record.id
       );
       const playerRef = doc(db, `users/${currentUser.uid}/players`, name);
@@ -322,10 +402,12 @@ const PlayerDetail = () => {
       await setDoc(recordRef, { speed: record.speed, date: record.date });
 
       const playerSnap = await getDoc(playerRef);
-      const currentSpeed = playerSnap.exists() ? playerSnap.data().speed ?? 0 : 0;
+      const currentSpeed = playerSnap.exists()
+        ? playerSnap.data()[measurement.valueField] ?? 0
+        : 0;
       const currentUpdatedAt =
-        playerSnap.exists() && playerSnap.data().updatedAt?.toDate
-          ? playerSnap.data().updatedAt.toDate()
+        playerSnap.exists() && playerSnap.data()[measurement.updatedAtField]?.toDate
+          ? playerSnap.data()[measurement.updatedAtField].toDate()
           : null;
       const nextSpeed = Math.max(currentSpeed, record.speed);
       const nextUpdatedAt =
@@ -335,7 +417,11 @@ const PlayerDetail = () => {
 
       await setDoc(
         playerRef,
-        { name, speed: nextSpeed, updatedAt: nextUpdatedAt },
+        {
+          name,
+          [measurement.valueField]: nextSpeed,
+          [measurement.updatedAtField]: nextUpdatedAt,
+        },
         { merge: true }
       );
     } catch (undoError) {
@@ -362,7 +448,7 @@ const PlayerDetail = () => {
             <p className="eyebrow">選手詳細</p>
             <h1 className="page-title">{name}の推移</h1>
             <p className="subtle-text">
-              期間で絞り込みながら、最高速度の山や直近の伸びを確認できます。
+              期間で絞り込みながら、{measurement.label}の山や直近の伸びを確認できます。
             </p>
           </div>
           <div className="detail-filter-group" role="group" aria-label="期間フィルタ">
@@ -389,7 +475,7 @@ const PlayerDetail = () => {
         <section className="detail-summary card">
           <div className="detail-summary-grid">
             <div className="stat-card">
-              <p className="stat-label">最高球速</p>
+              <p className="stat-label">最高{measurement.label}</p>
               <p className="stat-value">
                 {stats.topSpeed !== null ? (
                   <>
@@ -402,7 +488,7 @@ const PlayerDetail = () => {
               </p>
             </div>
             <div className="stat-card">
-              <p className="stat-label">平均球速</p>
+              <p className="stat-label">平均{measurement.label}</p>
               <p className="stat-value">
                 {stats.averageSpeed !== null ? (
                   <>
@@ -463,7 +549,7 @@ const PlayerDetail = () => {
             <section className="detail-card card">
               <div className="section-heading">
                 <div>
-                  <h2 className="section-title">球速の推移</h2>
+                  <h2 className="section-title">{measurement.label}の推移</h2>
                   <p className="section-subtitle">
                     最高速度のポイントをハイライトし、ホバーで日付と速度を確認できます。
                   </p>
@@ -486,7 +572,7 @@ const PlayerDetail = () => {
                 <div>
                   <h2 className="section-title">記録一覧</h2>
                   <p className="section-subtitle">
-                    日付順や球速順に並べ替えて、推移の山やピークを追いやすくしました。
+                    日付順や{measurement.label}順に並べ替えて、推移の山やピークを追いやすくしました。
                   </p>
                 </div>
                 <div className="toolbar-group">
@@ -501,7 +587,7 @@ const PlayerDetail = () => {
                     aria-label="記録の並び替え"
                   >
                     <option value="date">日付（新しい順）</option>
-                    <option value="speed">球速（高速順）</option>
+                    <option value="speed">{measurement.label}（高速順）</option>
                   </select>
                 </div>
               </div>

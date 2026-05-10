@@ -26,6 +26,20 @@ test('renders modal with shared form styles and helper texts', () => {
   );
 });
 
+test('renders swing speed copy when measurement label is provided', () => {
+  render(
+    <AddRecordModal
+      isOpen={true}
+      onClose={jest.fn()}
+      onSubmit={jest.fn()}
+      measurementLabel="スイングスピード"
+    />
+  );
+
+  expect(screen.getByLabelText('スイングスピード (km/h)')).toHaveClass('input');
+  expect(screen.getByText(/40〜180 km\/h/)).toBeInTheDocument();
+});
+
 test('prefills player name when presetName is provided', async () => {
   render(
     <AddRecordModal

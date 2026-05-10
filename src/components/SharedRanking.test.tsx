@@ -32,6 +32,7 @@ test('renders shared ranking snapshot for signed-out viewer', async () => {
     onNext({
       exists: () => true,
       data: () => ({
+        measurementType: 'swing',
         periodFilter: 'all',
         stats: { topSpeed: 150, averageSpeed: 145.5, playerCount: 2 },
         players: [
@@ -65,8 +66,9 @@ test('renders shared ranking snapshot for signed-out viewer', async () => {
   expect(
     await screen.findByRole('heading', { name: '共有ランキング' })
   ).toBeInTheDocument();
+  expect(screen.getByText('最高スイングスピード')).toBeInTheDocument();
+  expect(screen.getByText('平均スイングスピード')).toBeInTheDocument();
   expect(screen.getByText('Sato')).toBeInTheDocument();
   expect(screen.getByText('Ito')).toBeInTheDocument();
   expect(screen.getByText('自分用に作る')).toBeInTheDocument();
 });
-
