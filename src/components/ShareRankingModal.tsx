@@ -10,6 +10,7 @@ import {
   where,
   writeBatch,
 } from 'firebase/firestore';
+import { MeasurementType } from '../measurements';
 
 type PeriodFilter = 'all' | '30' | '7';
 
@@ -29,6 +30,7 @@ type SnapshotStats = {
 };
 
 type RankingSnapshot = {
+  measurementType: MeasurementType;
   periodFilter: PeriodFilter;
   players: SnapshotPlayer[];
   stats: SnapshotStats;
@@ -86,17 +88,6 @@ const addDays = (base: Date, days: number) => {
   const next = new Date(base);
   next.setDate(next.getDate() + days);
   return next;
-};
-
-const MAX_CHART_RECORDS = 60;
-
-const getPeriodThreshold = (filter: PeriodFilter) => {
-  if (filter === 'all') return null;
-  const days = filter === '30' ? 30 : 7;
-  const threshold = new Date();
-  threshold.setHours(0, 0, 0, 0);
-  threshold.setDate(threshold.getDate() - (days - 1));
-  return threshold;
 };
 
 const copyToClipboard = async (text: string) => {
@@ -236,6 +227,7 @@ const ShareRankingModal: React.FC<Props> = ({
       batch.set(shareRef, {
         version: 2,
         ownerUid,
+        measurementType: snapshot.measurementType,
         createdAt: serverTimestamp(),
         expiresAt,
         periodFilter: snapshot.periodFilter,

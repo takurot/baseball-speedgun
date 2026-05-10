@@ -3,6 +3,11 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { auth, db } from '../firebase';
+import {
+  MeasurementType,
+  getMeasurement,
+  isMeasurementType,
+} from '../measurements';
 
 type PeriodFilter = 'all' | '30' | '7';
 
@@ -20,6 +25,7 @@ type SharedStats = {
 };
 
 type SharedRankingData = {
+  measurementType: MeasurementType;
   periodFilter: PeriodFilter;
   stats: SharedStats;
   players: SharedPlayer[];
@@ -86,6 +92,9 @@ const SharedRanking: React.FC = () => {
         const stats = raw.stats ?? {};
         const players = Array.isArray(raw.players) ? raw.players : [];
         const parsed: SharedRankingData = {
+          measurementType: isMeasurementType(raw.measurementType)
+            ? raw.measurementType
+            : 'pitch',
           periodFilter: (raw.periodFilter as PeriodFilter) ?? 'all',
           stats: {
             topSpeed: typeof stats.topSpeed === 'number' ? stats.topSpeed : null,
@@ -132,6 +141,9 @@ const SharedRanking: React.FC = () => {
     if (data.expiresAt) return `期限: ${formatDate(data.expiresAt)}`;
     return '期限: 無期限';
   }, [data, isExpired]);
+  const measurement = data
+    ? getMeasurement(data.measurementType)
+    : getMeasurement('pitch');
 
   if (isLoading) {
     return (
@@ -229,7 +241,7 @@ const SharedRanking: React.FC = () => {
       <main className="ranking-main container">
         <section className="ranking-stats">
           <div className="stat-card card">
-            <p className="stat-label">最高球速</p>
+            <p className="stat-label">最高{measurement.label}</p>
             <p className="stat-value">
               {data.stats.topSpeed !== null ? (
                 <>
@@ -242,7 +254,7 @@ const SharedRanking: React.FC = () => {
             </p>
           </div>
           <div className="stat-card card">
-            <p className="stat-label">平均球速</p>
+            <p className="stat-label">平均{measurement.label}</p>
             <p className="stat-value">
               {data.stats.averageSpeed !== null ? (
                 <>

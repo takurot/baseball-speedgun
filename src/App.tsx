@@ -54,6 +54,7 @@ function App() {
         {/* ログイン済みユーザー向けのルート */}
         <Route element={<PrivateRoute user={user} />}>
           <Route path="/ranking" element={<Ranking />} />
+          <Route path="/player/:name/:measurementType" element={<PlayerDetail />} />
           <Route path="/player/:name" element={<PlayerDetail />} />
         </Route>
 

@@ -37,6 +37,7 @@ test('renders empty state and disables create when snapshot has no players', asy
       onClose={jest.fn()}
       ownerUid="user-1"
       snapshot={{
+        measurementType: 'pitch',
         periodFilter: 'all',
         players: [],
         stats: { topSpeed: null, averageSpeed: null, playerCount: 0 },
@@ -75,6 +76,7 @@ test('shows existing share link when user already created one', async () => {
       onClose={jest.fn()}
       ownerUid="user-1"
       snapshot={{
+        measurementType: 'pitch',
         periodFilter: 'all',
         players: [
           { rank: 1, name: 'Sato', speed: 150, updatedAt: new Date('2024-06-01') },

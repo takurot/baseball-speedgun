@@ -10,6 +10,7 @@ jest.mock('../firebase', () => ({
 
 const mockOnAuthStateChanged = jest.fn();
 const mockOnSnapshot = jest.fn();
+const mockCollection = jest.fn(() => ({}));
 const mockDeleteDoc = jest.fn();
 const mockGetDoc = jest.fn();
 const mockSetDoc = jest.fn();
@@ -19,7 +20,8 @@ jest.mock('firebase/auth', () => ({
 }));
 
 jest.mock('firebase/firestore', () => ({
-  collection: jest.fn(() => ({})),
+  collection: (...args: unknown[]) => mockCollection.apply(null, args),
+  deleteField: jest.fn(() => 'DELETE_FIELD'),
   query: jest.fn(() => ({})),
   orderBy: jest.fn(() => ({})),
   doc: jest.fn(() => ({})),
@@ -41,6 +43,15 @@ const renderWithRouter = () =>
     <MemoryRouter initialEntries={['/player/Sato']}>
       <Routes>
         <Route path="/player/:name" element={<PlayerDetail />} />
+      </Routes>
+    </MemoryRouter>
+  );
+
+const renderSwingWithRouter = () =>
+  render(
+    <MemoryRouter initialEntries={['/player/Sato/swing']}>
+      <Routes>
+        <Route path="/player/:name/:measurementType" element={<PlayerDetail />} />
       </Routes>
     </MemoryRouter>
   );
@@ -81,6 +92,28 @@ beforeEach(() => {
       name: 'Sato',
     }),
   });
+});
+
+test('loads swing speed records when the route measurement is swing', async () => {
+  renderSwingWithRouter();
+
+  await act(async () => {
+    snapshotListener?.(
+      createSnapshot([
+        { id: '2024-05-01', speed: 128, date: new Date('2024-05-01') },
+      ])
+    );
+  });
+
+  expect(mockCollection).toHaveBeenCalledWith(
+    {},
+    'users/user-1/players/Sato/swingRecords'
+  );
+  expect(screen.getByText('最高スイングスピード')).toBeInTheDocument();
+  expect(screen.getByText('スイングスピードの推移')).toBeInTheDocument();
+  expect(screen.getByLabelText('記録の並び替え')).toHaveTextContent(
+    'スイングスピード（高速順）'
+  );
 });
 
 afterEach(() => {

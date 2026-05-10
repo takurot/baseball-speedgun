@@ -7,6 +7,7 @@ interface Props {
   onSubmit: (name: string, speed: string, date: string) => Promise<void> | void;
   presetName?: string;
   suggestedNames?: string[];
+  measurementLabel?: string;
 }
 
 const STORAGE_KEYS = {
@@ -31,6 +32,7 @@ const AddRecordModal: React.FC<Props> = ({
   onSubmit,
   presetName,
   suggestedNames = [],
+  measurementLabel = '球速',
 }) => {
   const getToday = () => new Date().toISOString().split('T')[0];
   const [name, setName] = useState(presetName ?? '');
@@ -106,7 +108,7 @@ const AddRecordModal: React.FC<Props> = ({
 
   const validateSpeed = (value: string) => {
     if (!value) {
-      return '球速を入力してください';
+      return `${measurementLabel}を入力してください`;
     }
     const parsed = Number(value);
     if (Number.isNaN(parsed)) {
@@ -327,7 +329,7 @@ const AddRecordModal: React.FC<Props> = ({
           </div>
           <div className="form-field">
             <label htmlFor="speed" className="form-label">
-              球速 (km/h)
+              {measurementLabel} (km/h)
             </label>
             <input
               id="speed"

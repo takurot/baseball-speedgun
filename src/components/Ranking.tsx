@@ -10,11 +10,13 @@ import {
   getDoc,
   writeBatch,
   getDocs,
+  deleteField,
 } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
 import AddRecordModal from './AddRecordModal';
 import ShareRankingModal from './ShareRankingModal';
 import { SPEED_MAX, SPEED_MIN } from '../constants';
+import { MEASUREMENT_TYPES, MeasurementType, getMeasurement } from '../measurements';
 
 interface Player {
   id: string;
@@ -64,6 +66,8 @@ const buildRanks = (players: Player[]): RankedPlayer[] => {
 
 const Ranking = () => {
   const [players, setPlayers] = useState<Player[]>([]);
+  const [allPlayerNames, setAllPlayerNames] = useState<string[]>([]);
+  const [activeMeasurement, setActiveMeasurement] = useState<MeasurementType>('pitch');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [presetName, setPresetName] = useState<string | undefined>();
@@ -78,12 +82,16 @@ const Ranking = () => {
   >(null);
   const toastTimerRef = useRef<NodeJS.Timeout | null>(null);
   const navigate = useNavigate();
+  const measurement = useMemo(
+    () => getMeasurement(activeMeasurement),
+    [activeMeasurement]
+  );
   const nameSuggestions = useMemo(
     () =>
-      Array.from(new Set(players.map((player) => player.name))).sort((a, b) =>
+      Array.from(new Set(allPlayerNames)).sort((a, b) =>
         a.localeCompare(b, 'ja')
       ),
-    [players]
+    [allPlayerNames]
   );
 
   useEffect(() => {
@@ -107,19 +115,30 @@ const Ranking = () => {
       playersRef,
       (querySnapshot) => {
         const playersData: Player[] = [];
+        const playerNames: string[] = [];
         querySnapshot.forEach((docSnap) => {
           const data = docSnap.data();
+          const name = typeof data.name === 'string' ? data.name : docSnap.id;
+          const metricValue = data[measurement.valueField];
+          const metricUpdatedAt = data[measurement.updatedAtField];
+          playerNames.push(name);
+          if (typeof metricValue !== 'number') {
+            return;
+          }
           playersData.push({
             id: docSnap.id,
-            name: data.name,
-            speed: data.speed,
-            updatedAt: data.updatedAt?.toDate
-              ? data.updatedAt.toDate()
+            name,
+            speed: metricValue,
+            updatedAt: metricUpdatedAt?.toDate
+              ? metricUpdatedAt.toDate()
+              : data.updatedAt?.toDate
+                ? data.updatedAt.toDate()
               : new Date(),
           });
         });
 
         setPlayers(playersData);
+        setAllPlayerNames(playerNames);
         setIsLoading(false);
         setError(null);
       },
@@ -130,7 +149,7 @@ const Ranking = () => {
       }
     );
     return () => unsub();
-  }, [currentUser]);
+  }, [currentUser, measurement]);
 
   useEffect(() => {
     return () => {
@@ -160,7 +179,7 @@ const Ranking = () => {
       throw new Error('入力内容を確認してください。');
     }
     if (Number.isNaN(newSpeed) || newSpeed < SPEED_MIN || newSpeed > SPEED_MAX) {
-      throw new Error(`球速は${SPEED_MIN}〜${SPEED_MAX}km/hで入力してください。`);
+      throw new Error(`${measurement.label}は${SPEED_MIN}〜${SPEED_MAX}km/hで入力してください。`);
     }
     if (Number.isNaN(recordDate.getTime())) {
       throw new Error('日付が正しくありません。');
@@ -171,7 +190,7 @@ const Ranking = () => {
     const playerRef = doc(db, `users/${currentUser.uid}/players`, trimmedName);
     const recordRef = doc(
       db,
-      `users/${currentUser.uid}/players/${trimmedName}/records`,
+      `users/${currentUser.uid}/players/${trimmedName}/${measurement.recordsCollection}`,
       recordDateString
     );
 
@@ -189,12 +208,16 @@ const Ranking = () => {
 
       const playerSnap = await getDoc(playerRef);
       const currentMaxSpeed = playerSnap.exists()
-        ? playerSnap.data().speed
+        ? playerSnap.data()[measurement.valueField] ?? 0
         : 0;
       const nextMaxSpeed = Math.max(currentMaxSpeed, newSpeed);
       await setDoc(
         playerRef,
-        { name: trimmedName, speed: nextMaxSpeed, updatedAt: recordDate },
+        {
+          name: trimmedName,
+          [measurement.valueField]: nextMaxSpeed,
+          [measurement.updatedAtField]: recordDate,
+        },
         { merge: true }
       );
 
@@ -202,7 +225,7 @@ const Ranking = () => {
       setPresetName(undefined);
       showToast({
         type: 'success',
-        message: `${trimmedName}に${newSpeed}km/hで記録を追加しました`,
+        message: `${trimmedName}に${newSpeed}km/hで${measurement.label}を追加しました`,
       });
     } catch (error) {
       console.error("記録の追加に失敗しました: ", error);
@@ -215,13 +238,13 @@ const Ranking = () => {
   };
 
   const handleDeletePlayer = async (playerName: string) => {
-    if (!currentUser || !window.confirm(`${playerName}選手のすべての記録を削除します。よろしいですか？`)) {
+    if (!currentUser || !window.confirm(`${playerName}選手の${measurement.label}記録を削除します。よろしいですか？`)) {
       return;
     }
 
     try {
       const playerRef = doc(db, `users/${currentUser.uid}/players`, playerName);
-      const recordsQuery = query(collection(db, `users/${currentUser.uid}/players/${playerName}/records`));
+      const recordsQuery = query(collection(db, `users/${currentUser.uid}/players/${playerName}/${measurement.recordsCollection}`));
       
       const batch = writeBatch(db);
       
@@ -229,8 +252,27 @@ const Ranking = () => {
       querySnapshot.forEach((doc) => {
         batch.delete(doc.ref);
       });
-      
-      batch.delete(playerRef);
+
+      const playerSnap = await getDoc(playerRef);
+      const playerData = playerSnap.exists() ? playerSnap.data() : null;
+      const hasOtherMeasurement = MEASUREMENT_TYPES.some((type) => {
+        if (type === activeMeasurement || !playerData) return false;
+        const otherMeasurement = getMeasurement(type);
+        return typeof playerData[otherMeasurement.valueField] === 'number';
+      });
+
+      if (hasOtherMeasurement) {
+        batch.set(
+          playerRef,
+          {
+            [measurement.valueField]: deleteField(),
+            [measurement.updatedAtField]: deleteField(),
+          },
+          { merge: true }
+        );
+      } else {
+        batch.delete(playerRef);
+      }
       
       await batch.commit();
 
@@ -328,7 +370,7 @@ const Ranking = () => {
           <p className="eyebrow">ダッシュボード</p>
           <h1 className="page-title">スピードガンランキング</h1>
           <p className="subtle-text">
-            最高速度でソートしつつ、期間や検索で目的の選手をすぐに探せます。
+            球速とスイングスピードを切り替えながら、期間や検索で目的の選手をすぐに探せます。
           </p>
         </div>
         <div className="ranking-actions">
@@ -346,6 +388,25 @@ const Ranking = () => {
           </button>
         </div>
       </header>
+
+      <section className="ranking-tabs container" role="tablist" aria-label="ランキング種別">
+        {MEASUREMENT_TYPES.map((type) => {
+          const option = getMeasurement(type);
+          const isActive = activeMeasurement === type;
+          return (
+            <button
+              key={type}
+              type="button"
+              role="tab"
+              aria-selected={isActive}
+              className={`ranking-tab ${isActive ? 'ranking-tab-active' : ''}`}
+              onClick={() => setActiveMeasurement(type)}
+            >
+              {option.label}
+            </button>
+          );
+        })}
+      </section>
 
       <section className="ranking-toolbar container card">
         <div className="toolbar-group">
@@ -375,7 +436,7 @@ const Ranking = () => {
             onChange={(e) => setSortKey(e.target.value as SortKey)}
             aria-label="ソート"
           >
-            <option value="speed">最高速度</option>
+            <option value="speed">最高{measurement.label}</option>
             <option value="updatedAt">更新日</option>
             <option value="name">名前</option>
           </select>
@@ -395,7 +456,7 @@ const Ranking = () => {
       <main className="ranking-main container">
         <section className="ranking-stats">
           <div className="stat-card card">
-            <p className="stat-label">最高球速</p>
+            <p className="stat-label">最高{measurement.label}</p>
             <p className="stat-value">
               {stats.topSpeed !== null ? (
                 <>
@@ -408,7 +469,7 @@ const Ranking = () => {
             </p>
           </div>
           <div className="stat-card card">
-            <p className="stat-label">平均球速</p>
+            <p className="stat-label">平均{measurement.label}</p>
             <p className="stat-value">
               {stats.averageSpeed !== null ? (
                 <>
@@ -457,7 +518,7 @@ const Ranking = () => {
         ) : sortedPlayers.length === 0 ? (
           <div className="card empty-card">
             <p className="empty-state">
-              まだ記録がありません。最初の1球を登録しましょう。
+              まだ{measurement.label}記録がありません。最初の記録を登録しましょう。
             </p>
             <div className="empty-actions">
               <button
@@ -476,11 +537,11 @@ const Ranking = () => {
                   className="ranking-item-main"
                   role="button"
                   tabIndex={0}
-                  onClick={() => navigate(`/player/${player.name}`)}
+                  onClick={() => navigate(`/player/${encodeURIComponent(player.name)}/${activeMeasurement}`)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault();
-                      navigate(`/player/${player.name}`);
+                      navigate(`/player/${encodeURIComponent(player.name)}/${activeMeasurement}`);
                     }
                   }}
                 >
@@ -512,14 +573,14 @@ const Ranking = () => {
                 <div className="player-actions">
                   <button
                     onClick={() => handleOpenModal(player.name)}
-                    title="記録を追加"
-                    aria-label={`${player.name}に記録を追加`}
+                    title={`${measurement.label}記録を追加`}
+                    aria-label={`${player.name}に${measurement.label}記録を追加`}
                     className="icon-button"
                   >
                     +
                   </button>
                   <button
-                    onClick={() => navigate(`/player/${player.name}`)}
+                    onClick={() => navigate(`/player/${encodeURIComponent(player.name)}/${activeMeasurement}`)}
                     title="グラフを表示"
                     aria-label={`${player.name}のグラフを表示`}
                     className="icon-button"
@@ -556,13 +617,14 @@ const Ranking = () => {
         onSubmit={handleAddRecord}
         presetName={presetName}
         suggestedNames={nameSuggestions}
+        measurementLabel={measurement.label}
       />
       {currentUser && (
         <ShareRankingModal
           isOpen={isShareModalOpen}
           onClose={() => setIsShareModalOpen(false)}
           ownerUid={currentUser.uid}
-          snapshot={{ periodFilter, players: sharePlayers, stats: shareStats }}
+          snapshot={{ measurementType: activeMeasurement, periodFilter, players: sharePlayers, stats: shareStats }}
           onToast={showToast}
         />
       )}
