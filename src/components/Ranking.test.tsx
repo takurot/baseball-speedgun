@@ -134,6 +134,29 @@ const createQuerySnapshot = (docs: ReturnType<typeof createRecordDoc>[]) => ({
     docs.forEach(callback),
 });
 
+test('renders ranking tab list centered within container', async () => {
+  renderRanking();
+
+  await act(async () => {
+    snapshotListener?.(
+      createSnapshot([
+        { id: 'Sato', name: 'Sato', speed: 150, updatedAt: new Date('2024-06-01') },
+      ])
+    );
+  });
+
+  const tabList = screen.getByRole('tablist', { name: 'ランキング種別' });
+  expect(tabList).toHaveClass('ranking-tabs');
+  expect(tabList).toHaveClass('container');
+
+  const tabs = within(tabList).getAllByRole('tab');
+  expect(tabs).toHaveLength(2);
+  expect(tabs[0]).toHaveTextContent('球速');
+  expect(tabs[1]).toHaveTextContent('スイングスピード');
+  expect(tabs[0]).toHaveAttribute('aria-selected', 'true');
+  expect(tabs[1]).toHaveAttribute('aria-selected', 'false');
+});
+
 test('switches between pitch and swing rankings with matching labels', async () => {
   renderRanking();
 
